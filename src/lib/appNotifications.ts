@@ -95,13 +95,21 @@ export const olderNotificationHistory: AppNotification[] = [
 
 export const getNotificationTimeline = (recentNotifications = loadAppNotifications()) => {
   const seen = new Set<string>();
-  return [...recentNotifications, ...olderNotificationHistory]
+  const uniqueRecent = recentNotifications
     .filter((notification) => {
       if (seen.has(notification.id)) return false;
       seen.add(notification.id);
       return true;
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const uniqueHistory = olderNotificationHistory.filter((notification) => {
+    if (seen.has(notification.id)) return false;
+    seen.add(notification.id);
+    return true;
+  });
+
+  return [...uniqueRecent, ...uniqueHistory];
 };
 
 export const loadAppNotifications = (): AppNotification[] => {
