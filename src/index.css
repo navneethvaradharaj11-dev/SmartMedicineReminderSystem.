@@ -1,0 +1,265 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MediMind refined elderly-friendly design system.
+   Palette rule: teal is brand/action, green is taken/success,
+   amber is attention, coral is missed/danger. All colors are HSL. */
+
+@layer base {
+  :root {
+    --background: 184 32% 97%;
+    --foreground: 204 32% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 204 32% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 204 32% 13%;
+
+    --primary: 176 62% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 176 55% 92%;
+    --primary-glow: 181 64% 48%;
+
+    --secondary: 192 34% 94%;
+    --secondary-foreground: 204 28% 20%;
+
+    --muted: 190 28% 95%;
+    --muted-foreground: 204 12% 43%;
+
+    --accent: 190 58% 92%;
+    --accent-foreground: 190 56% 28%;
+
+    --success: 148 46% 39%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 148 46% 92%;
+
+    --warning: 38 88% 48%;
+    --warning-foreground: 36 62% 16%;
+    --warning-soft: 40 88% 93%;
+
+    --destructive: 6 68% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 6 72% 94%;
+
+    --border: 190 22% 88%;
+    --input: 190 22% 88%;
+    --ring: 176 62% 36%;
+
+    --radius: 1.25rem;
+
+    --gradient-hero: linear-gradient(135deg, hsl(176 62% 34%) 0%, hsl(188 58% 43%) 100%);
+    --gradient-card: linear-gradient(160deg, hsl(0 0% 100%) 0%, hsl(176 38% 98%) 100%);
+    --gradient-bg: linear-gradient(180deg, hsl(184 38% 97%) 0%, hsl(190 30% 94%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(148 46% 39%) 0%, hsl(158 48% 44%) 100%);
+
+    --shadow-soft: 0 8px 24px -8px hsl(176 45% 28% / 0.16);
+    --shadow-card: 0 4px 16px -4px hsl(196 35% 26% / 0.08);
+    --shadow-glow: 0 0 30px hsl(181 64% 48% / 0.28);
+    --shadow-float: 0 20px 50px -20px hsl(204 40% 18% / 0.24);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 204 32% 8%;
+    --foreground: 184 18% 94%;
+    --card: 204 28% 12%;
+    --card-foreground: 184 18% 94%;
+    --popover: 204 28% 12%;
+    --popover-foreground: 184 18% 94%;
+    --primary: 176 52% 50%;
+    --primary-foreground: 204 36% 8%;
+    --primary-soft: 176 42% 18%;
+    --primary-glow: 184 64% 56%;
+    --secondary: 204 22% 16%;
+    --secondary-foreground: 184 18% 94%;
+    --muted: 204 22% 16%;
+    --muted-foreground: 190 14% 68%;
+    --accent: 190 30% 18%;
+    --accent-foreground: 186 42% 82%;
+    --success: 148 48% 50%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 148 34% 18%;
+    --warning: 40 86% 58%;
+    --warning-foreground: 36 54% 10%;
+    --warning-soft: 38 42% 20%;
+    --destructive: 6 70% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 6 38% 22%;
+    --border: 204 22% 21%;
+    --input: 204 22% 21%;
+    --ring: 176 52% 50%;
+    --gradient-hero: linear-gradient(135deg, hsl(176 50% 28%) 0%, hsl(190 50% 34%) 100%);
+    --gradient-card: linear-gradient(160deg, hsl(204 28% 14%) 0%, hsl(204 30% 11%) 100%);
+    --gradient-bg: linear-gradient(180deg, hsl(204 32% 8%) 0%, hsl(204 28% 11%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(148 46% 42%) 0%, hsl(158 48% 48%) 100%);
+    --shadow-soft: 0 8px 24px -8px hsl(176 60% 18% / 0.42);
+    --shadow-card: 0 4px 16px -4px hsl(204 70% 4% / 0.28);
+    --shadow-glow: 0 0 30px hsl(184 64% 56% / 0.2);
+    --shadow-float: 0 20px 50px -20px hsl(204 80% 3% / 0.58);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  body,
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+}
+
+@layer utilities {
+  .bg-hero {
+    background: var(--gradient-hero);
+  }
+
+  .hero-surface::before,
+  .hero-surface::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    border: 1px solid hsl(0 0% 100% / 0.12);
+    background: hsl(0 0% 100% / 0.12);
+    z-index: 0;
+  }
+
+  .hero-surface > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-surface::before {
+    right: -3.5rem;
+    top: -2.75rem;
+    width: 12rem;
+    height: 15rem;
+    border-radius: 3.5rem;
+    transform: rotate(18deg);
+  }
+
+  .hero-surface::after {
+    right: -5rem;
+    bottom: -4rem;
+    width: 13rem;
+    height: 9rem;
+    border-radius: 4rem;
+    background: hsl(0 0% 100% / 0.08);
+    transform: rotate(-28deg);
+  }
+
+  .bg-card-gradient {
+    background: var(--gradient-card);
+  }
+
+  .bg-page {
+    background: var(--gradient-bg);
+  }
+
+  .bg-success-gradient {
+    background: var(--gradient-success);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .shadow-float {
+    box-shadow: var(--shadow-float);
+  }
+
+  @keyframes soft-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 0.7;
+      transform: scale(1.05);
+    }
+  }
+
+  .animate-soft-pulse {
+    animation: soft-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes grow-x-from-zero {
+    from {
+      transform: scaleX(0);
+    }
+
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes grow-y-from-zero {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .animate-grow-x {
+    animation: grow-x-from-zero 850ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: left center;
+    will-change: transform;
+  }
+
+  .animate-grow-y {
+    animation: grow-y-from-zero 850ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: bottom center;
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-grow-x,
+    .animate-grow-y {
+      animation: none;
+    }
+  }
+}

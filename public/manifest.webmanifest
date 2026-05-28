@@ -1,0 +1,25 @@
+{
+  "name": "MediMind - Smart Medicine Reminder",
+  "short_name": "MediMind",
+  "description": "Smart medicine reminder app that can run offline after installation.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef7f6",
+  "theme_color": "#279b9c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app-icon.svg?v=2",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon.svg?v=2",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
