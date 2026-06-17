@@ -17,36 +17,6 @@ export type GroupedNotification = AppNotification & {
 const STORAGE_KEY = "gentle-dose-app-notifications-v1";
 const MAX_EVENTS = 80;
 
-export const demoNotifications: AppNotification[] = [
-  {
-    id: "demo-reminder",
-    type: "reminder",
-    title: "Medicine reminder sent",
-    message: "Metformin 500 mg is due at 9:30 AM.",
-    createdAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-success",
-    type: "success",
-    title: "Dose confirmed",
-    message: "Atorvastatin 10 mg was marked as taken.",
-    createdAt: new Date(Date.now() - 55 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-stock",
-    type: "stock",
-    title: "Low medicine stock",
-    message: "Aspirin has 5 tablets left.",
-    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-expiry",
-    type: "expired",
-    title: "Expiry warning",
-    message: "Vitamin D expires in 7 days.",
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
 
 export const olderNotificationHistory: AppNotification[] = [
   {
@@ -71,13 +41,6 @@ export const olderNotificationHistory: AppNotification[] = [
     createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: "history-bluetooth-check",
-    type: "reminder",
-    title: "Bluetooth check reminder",
-    message: "Smart pill box connection was checked before the dose window.",
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
     id: "history-expiry-check",
     type: "expired",
     title: "Expiry check completed",
@@ -95,21 +58,16 @@ export const olderNotificationHistory: AppNotification[] = [
 
 export const getNotificationTimeline = (recentNotifications = loadAppNotifications()) => {
   const seen = new Set<string>();
-  const uniqueRecent = recentNotifications
+  const newestFirst = (a: AppNotification, b: AppNotification) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+  return [[...recentNotifications].sort(newestFirst), [...olderNotificationHistory].sort(newestFirst)]
+    .flat()
     .filter((notification) => {
       if (seen.has(notification.id)) return false;
       seen.add(notification.id);
       return true;
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  const uniqueHistory = olderNotificationHistory.filter((notification) => {
-    if (seen.has(notification.id)) return false;
-    seen.add(notification.id);
-    return true;
-  });
-
-  return [...uniqueRecent, ...uniqueHistory];
+    });
 };
 
 export const loadAppNotifications = (): AppNotification[] => {

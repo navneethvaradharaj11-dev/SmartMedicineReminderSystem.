@@ -44,7 +44,6 @@ import { toast } from "sonner";
 
 interface SmartScheduleCalendarProps {
   language?: AppLanguage;
-  demoMode?: boolean;
   schedules: SmartMedicineSchedule[];
   onCreateSchedule: (draft: SmartMedicineScheduleDraft) => void;
   onUpdateDayStatus: (scheduleId: string, dateKey: string, status: SmartMedicineDayStatus) => void;
@@ -53,7 +52,6 @@ interface SmartScheduleCalendarProps {
 
 const SmartScheduleCalendar = ({
   language = "en",
-  demoMode = false,
   schedules,
   onCreateSchedule,
   onUpdateDayStatus,
@@ -98,8 +96,6 @@ const SmartScheduleCalendar = ({
           createFirst: "முதலில் மருந்து பெயர், தேதி வரம்பு மற்றும் நேரங்களை தேர்வு செய்யவும்",
           scheduleCreated: "ஸ்மார்ட் மருந்துக் கால அட்டவணை உருவாக்கப்பட்டது",
           courseRemoved: "மருந்துக் கால அட்டவணை நீக்கப்பட்டது",
-          demoReadOnlyTitle: "டெமோ முறை படிக்க மட்டும்",
-          demoReadOnlyDescription: "உண்மையான கால அட்டவணையை மாற்ற டெமோ முறையை அணைக்கவும்.",
         }
       : {
           title: "Smart Medicine Scheduling Calendar",
@@ -138,8 +134,6 @@ const SmartScheduleCalendar = ({
           createFirst: "Select a medicine name, date range, and at least one time slot",
           scheduleCreated: "Smart course created",
           courseRemoved: "Course removed",
-          demoReadOnlyTitle: "Demo mode is read-only",
-          demoReadOnlyDescription: "Turn off Demo mode to edit real course schedules.",
         };
 
   const [medicineName, setMedicineName] = useState("");
@@ -151,11 +145,7 @@ const SmartScheduleCalendar = ({
   const [selectedDayKey, setSelectedDayKey] = useState<string>(toDateKey(new Date()));
   const [createOpen, setCreateOpen] = useState(false);
 
-  const notifyDemoReadOnly = () => {
-    toast.info(copy.demoReadOnlyTitle, {
-      description: copy.demoReadOnlyDescription,
-    });
-  };
+
 
   useEffect(() => {
     if (!schedules.length) {
@@ -268,12 +258,6 @@ const SmartScheduleCalendar = ({
   };
 
   const handleCreateSchedule = () => {
-    if (demoMode) {
-      notifyDemoReadOnly();
-      setCreateOpen(false);
-      return;
-    }
-
     if (!medicineName.trim() || !range?.from || !range?.to || draftedTimeSlots.length === 0) {
       toast.error(copy.createFirst);
       return;
@@ -299,22 +283,12 @@ const SmartScheduleCalendar = ({
   };
 
   const handleRemoveSchedule = (scheduleId: string) => {
-    if (demoMode) {
-      notifyDemoReadOnly();
-      return;
-    }
-
     onRemoveSchedule(scheduleId);
     toast(copy.courseRemoved);
   };
 
   const handleUpdateDayStatus = (status: SmartMedicineDayStatus) => {
     if (!selectedSchedule) return;
-
-    if (demoMode) {
-      notifyDemoReadOnly();
-      return;
-    }
 
     onUpdateDayStatus(selectedSchedule.id, selectedDayKey, status);
   };
@@ -350,11 +324,11 @@ const SmartScheduleCalendar = ({
     return (
       <div
         className={cn(
-          "relative mx-auto flex h-11 w-11 items-center justify-center rounded-full font-bold transition-colors",
+          "relative mx-auto flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold transition-colors",
           active && "bg-primary-soft/70 text-primary",
           entry?.status === "taken" && "bg-success text-success-foreground",
           entry?.status === "missed" && "bg-destructive text-destructive-foreground",
-          selected && "ring-2 ring-primary ring-offset-4 ring-offset-background"
+          selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
       >
         <span>{format(date, "d")}</span>
@@ -388,10 +362,6 @@ const SmartScheduleCalendar = ({
             <Button
               type="button"
               onClick={() => {
-                if (demoMode) {
-                  notifyDemoReadOnly();
-                  return;
-                }
                 setCreateOpen(true);
               }}
               className="h-11 shrink-0 rounded-2xl bg-primary px-4 font-bold text-primary-foreground"

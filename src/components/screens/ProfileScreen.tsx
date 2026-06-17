@@ -4,10 +4,6 @@ import {
   User,
   IdCard,
   CalendarDays,
-  Pill,
-  Clock,
-  Bluetooth,
-  RefreshCw,
   Pencil,
   ChevronRight,
   LogOut,
@@ -18,6 +14,7 @@ import {
   Phone,
   Type,
   Volume2,
+  Music,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +46,12 @@ interface ProfileScreenProps {
   voiceGuidance: boolean;
   onVoiceGuidanceChange: (enabled: boolean) => void;
   onTestVoice: () => void;
-  demoMode?: boolean;
+  onTestNotification?: () => void;
+  voiceGender?: "female" | "male";
+  onVoiceGenderChange?: (gender: "female" | "male") => void;
+  ringtoneUri?: string;
+  ringtoneTitle?: string;
+  onSelectRingtone?: () => void;
 }
 
 type FontSizePreference = "small" | "medium" | "large";
@@ -69,7 +71,12 @@ const ProfileScreen = ({
   voiceGuidance,
   onVoiceGuidanceChange,
   onTestVoice,
-  demoMode = false,
+  onTestNotification,
+  voiceGender = "female",
+  onVoiceGenderChange,
+  ringtoneUri = "",
+  ringtoneTitle = "Default ringtone",
+  onSelectRingtone,
 }: ProfileScreenProps) => {
   const [name, setName] = useState(userProfile.fullName);
   const [age, setAge] = useState(userProfile.age);
@@ -80,48 +87,39 @@ const ProfileScreen = ({
   const copy =
     language === "ta"
       ? {
-          title: "என் சுயவிவரம்",
+          title: "சுயவிவரம்",
           signOut: "வெளியேறு",
-          patient: "நோயாளர்",
+          patient: "நோயாளி",
           years: "வயது",
-          userInfo: "பயனர் தகவல்",
+          userInfo: "பயனர் விபரங்கள்",
           save: "சேமிக்கவும்",
           edit: "திருத்தவும்",
           name: "பெயர்",
           age: "வயது",
-          saveChanges: "மாற்றங்களை சேமிக்கவும்",
-          fullName: "முழு பெயர்",
-          patientId: "நோயாளர் எண்",
-          healthSummary: "உடல்நிலை சுருக்கம்",
+          saveChanges: "மாற்றங்களைச் சேமி",
+          fullName: "முழுப் பெயர்",
+          patientId: "நோயாளி அடையாள எண்",
+          healthSummary: "உடல்நலச் சுருக்கம்",
           perDay: "ஒரு நாள்",
-          nextDose: "அடுத்த மருந்து",
-          adherence: "பின்பற்றல்",
-          systemStatus: "அமைப்பு நிலை",
-          sync: "ஒத்திசை",
-          smartPillBox: "ஸ்மார்ட் மருந்துப் பெட்டி",
-          connected: "இணைக்கப்பட்டுள்ளது",
-          lastSync: "கடைசி ஒத்திசைவு",
-          lastSyncValue: "2 நிமிடங்கள் முன்பு",
-          healthAlerts: "உடல் எச்சரிக்கைகள்",
-          missedDoses: "தவறிய மருந்துகள்",
+          nextDose: "அடுத்த வேளை மருந்து",
+          adherence: "பின்பற்றல் விகிதம்",
+          healthAlerts: "உடல்நல எச்சரிக்கைகள்",
+          missedDoses: "தவறவிட்ட மருந்துகள்",
           thisWeek: "இந்த வாரம்",
-          expiryWarning: "காலாவதி எச்சரிக்கை",
+          expiryWarning: "காலாவதி எச்சரிக்கைகள்",
           soon: "விரைவில்",
-          allFresh: "அனைத்தும் புதியது",
-          medicineStock: "மருந்து இருப்பு",
-          low: "குறைவு",
-          wellStocked: "போதுமான இருப்பு",
+          allFresh: "அனைத்தும் நல்ல நிலையில் உள்ளன",
+          medicineStock: "மாத்திரை இருப்பு",
+          low: "குறைவான இருப்பு",
+          wellStocked: "போதுமான இருப்பு உள்ளது",
           settings: "அமைப்புகள்",
-          editProfile: "சுயவிவரத்தை திருத்தவும்",
-          manageReminders: "நினைவூட்டல்களை நிர்வகிக்கவும்",
-          notifications: "எச்சரிக்கைகள்",
-          viewAllAlerts: "அனைத்து எச்சரிக்கைகளையும் பார்க்கவும்",
-          notificationsEnabled: "எச்சரிக்கைகள் இயக்கப்பட்டது",
-          notificationsMuted: "எச்சரிக்கைகள் அமைதியாக்கப்பட்டது",
+          editProfile: "சுயவிவரத்தைத் திருத்து",
+          manageReminders: "நினைவூட்டல்களை நிர்வகி",
+          notifications: "அறிவிப்புகள்",
+          viewAllAlerts: "அனைத்து அறிவிப்புகளையும் பார்",
+          notificationsEnabled: "அறிவிப்புகள் இயக்கப்பட்டது",
+          notificationsMuted: "அறிவிப்புகள் அமைதியாக்கப்பட்டது",
           profileUpdated: "சுயவிவரம் புதுப்பிக்கப்பட்டது",
-          syncLoading: "மருந்துப் பெட்டியுடன் ஒத்திசைக்கிறது...",
-          syncDone: "ஒத்திசைவு முடிந்தது",
-          syncDoneDescription: "அனைத்து தகவல்களும் புதுப்பிக்கப்பட்டுள்ளன",
         }
       : {
           title: "My Profile",
@@ -140,12 +138,6 @@ const ProfileScreen = ({
           perDay: "Per day",
           nextDose: "Next dose",
           adherence: "Adherence",
-          systemStatus: "System Status",
-          sync: "Sync",
-          smartPillBox: "Smart pill box",
-          connected: "Connected",
-          lastSync: "Last sync",
-          lastSyncValue: "2 min ago",
           healthAlerts: "Health Alerts",
           missedDoses: "Missed doses",
           thisWeek: "this week",
@@ -163,9 +155,6 @@ const ProfileScreen = ({
           notificationsEnabled: "Notifications enabled",
           notificationsMuted: "Notifications muted",
           profileUpdated: "Profile updated",
-          syncLoading: "Syncing with pill box...",
-          syncDone: "Sync complete",
-          syncDoneDescription: "All data up to date",
         };
 
   const patientId = userProfile.patientId;
@@ -197,15 +186,7 @@ const ProfileScreen = ({
     },
     {
       title: "Local/offline data",
-      body: "This demo stores app data on this device/browser for offline use. If browser data is cleared or the device changes, local saved data may not move with it.",
-    },
-    {
-      title: "Demo mode",
-      body: "Demo mode uses safe sample medicines, alerts, and a simulated connected pill box for client walkthroughs. Turn demo mode off before checking real Bluetooth hardware.",
-    },
-    {
-      title: "Bluetooth and device access",
-      body: "Smart pill box features depend on browser support, device permissions, Bluetooth or serial pairing, battery, and device availability.",
+      body: "This app stores app data on this device/browser for offline use. If browser data is cleared or the device changes, local saved data may not move with it.",
     },
   ];
 
@@ -237,16 +218,6 @@ const ProfileScreen = ({
     toast.success(copy.profileUpdated, {
       description: `${nextProfile.fullName} - ${nextProfile.age} ${copy.years}`,
     });
-  };
-
-  const handleSync = () => {
-    toast.loading(copy.syncLoading, { id: "sync" });
-    setTimeout(() => {
-      toast.success(copy.syncDone, {
-        id: "sync",
-        description: copy.syncDoneDescription,
-      });
-    }, 800);
   };
 
   return (
@@ -334,38 +305,6 @@ const ProfileScreen = ({
         </Card>
 
         <Card>
-          <CardHeader
-            Icon={Bluetooth}
-            title={copy.systemStatus}
-            action={
-              <button
-                onClick={handleSync}
-                className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary"
-              >
-                <RefreshCw className="h-3 w-3" />
-                {copy.sync}
-              </button>
-            }
-          />
-          <ul className="divide-y divide-border">
-            <StatusRow
-              Icon={Bluetooth}
-              label={copy.smartPillBox}
-              value={demoMode ? "Demo connected" : copy.connected}
-              dotClass="bg-success"
-              tone="success"
-            />
-            <StatusRow
-              Icon={RefreshCw}
-              label={copy.lastSync}
-              value={copy.lastSyncValue}
-              dotClass="bg-primary"
-              tone="primary"
-            />
-          </ul>
-        </Card>
-
-        <Card>
           <CardHeader Icon={Pencil} title={language === "ta" ? copy.settings : "Account"} />
           <ul className="divide-y divide-border">
             <ActionRow Icon={User} label={copy.editProfile} onClick={() => setEditing(true)} />
@@ -384,26 +323,90 @@ const ProfileScreen = ({
             />
             <ToggleRow
               Icon={Volume2}
-              label={language === "ta" ? "ஒலி எச்சரிக்கைகள்" : "Sound alerts"}
+              label={language === "ta" ? "ஒலி அறிவிப்புகள்" : "Sound alerts"}
               checked={soundAlerts}
               onChange={onSoundAlertsChange}
             />
+            {soundAlerts && (
+              <li className="flex flex-col gap-2 p-4 bg-secondary/20">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-foreground">
+                    <Music className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground">{language === "ta" ? "அலாரம் ஒலி" : "Alarm sound"}</p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {language === "ta" ? "தற்போதைய ஒலி" : "Current sound"}: <span className="font-bold text-primary">{ringtoneTitle || "Default ringtone"}</span>
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={onSelectRingtone}
+                  className="mt-1 h-10 w-full rounded-xl bg-primary-soft text-primary font-bold hover:bg-primary/20"
+                >
+                  <Music className="mr-1.5 h-4 w-4" />
+                  {language === "ta" ? "ஒலியை மாற்றவும்" : "Change sound"}
+                </Button>
+              </li>
+            )}
             <ToggleRow
               Icon={Megaphone}
-              label={language === "ta" ? "டாக்பேக் முறை" : "TalkBack mode"}
+              label={language === "ta" ? "டாக்பேக் முறை (குரல் உதவி)" : "TalkBack mode"}
               checked={voiceGuidance}
               onChange={onVoiceGuidanceChange}
             />
           </ul>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onTestVoice}
-            className="mt-3 h-12 w-full rounded-2xl border-border bg-card text-sm font-bold text-foreground hover:bg-secondary"
-          >
-            <Megaphone className="mr-2 h-4 w-4 text-primary" />
-            {language === "ta" ? "டாக்பேக் சோதனை" : "Test TalkBack"}
-          </Button>
+
+          {voiceGuidance && (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {language === "ta" ? "குரல் பாத்திரம் (Vocal Persona)" : "Vocal Persona"}
+              </p>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1">
+                <button
+                  type="button"
+                  onClick={() => onVoiceGenderChange?.("female")}
+                  className={cn(
+                    "min-h-[38px] rounded-xl text-xs font-extrabold transition-all duration-200",
+                    voiceGender === "female"
+                      ? "bg-card text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {language === "ta" ? "அமைதி (பெண்)" : "Serene (Female)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onVoiceGenderChange?.("male")}
+                  className={cn(
+                    "min-h-[38px] rounded-xl text-xs font-extrabold transition-all duration-200",
+                    voiceGender === "male"
+                      ? "bg-card text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {language === "ta" ? "அமைதி (ஆண்)" : "Calm (Male)"}
+                </button>
+              </div>
+              <Button
+                onClick={onTestVoice}
+                className="mt-3 h-10 w-full rounded-xl bg-primary-soft text-primary font-bold hover:bg-primary/20"
+              >
+                <Megaphone className="mr-1.5 h-5 w-5" />
+                {language === "ta" ? "குரல் உதவிச் சோதனை" : "Test TalkBack"}
+              </Button>
+            </div>
+          )}
+
+          {remindersEnabled && (
+            <Button
+              onClick={onTestNotification}
+              className="mt-3 h-10 w-full rounded-xl bg-primary-soft text-primary font-bold hover:bg-primary/20"
+            >
+              <Bell className="mr-1.5 h-5 w-5" />
+              {language === "ta" ? "அறிவிப்புச் சோதனை" : "Test Notification"}
+            </Button>
+          )}
         </Card>
 
         <Card>
@@ -441,7 +444,7 @@ const ProfileScreen = ({
         <Card>
           <CardHeader Icon={Mail} title={language === "ta" ? "Contact us" : "Contact us"} />
           <p className="text-sm leading-6 text-muted-foreground">
-            {language === "ta" ? "Need help with setup, Bluetooth, or reminders?" : "Need help with setup, Bluetooth, or reminders?"}
+            {language === "ta" ? "அமைப்புகள் அல்லது நினைவூட்டல்களில் உதவி தேவையா?" : "Need help with setup or reminders?"}
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Button
@@ -491,7 +494,7 @@ const ProfileScreen = ({
           <DialogHeader className="pr-7 text-left">
             <DialogTitle className="text-xl font-extrabold">Contact us</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              Need help with setup, Bluetooth, or reminders?
+              Need help with setup or reminders?
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -555,37 +558,7 @@ const InfoRow = ({ Icon, label, value }: { Icon: typeof User; label: string; val
   </li>
 );
 
-const StatusRow = ({
-  Icon,
-  label,
-  value,
-  dotClass,
-  tone,
-}: {
-  Icon: typeof Bluetooth;
-  label: string;
-  value: string;
-  dotClass: string;
-  tone: "success" | "primary";
-}) => (
-  <li className="flex items-center gap-3 py-3">
-    <div
-      className={cn(
-        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-        tone === "success" ? "bg-success-soft text-success" : "bg-primary-soft text-primary"
-      )}
-    >
-      <Icon className="h-5 w-5" />
-    </div>
-    <div className="min-w-0 flex-1">
-      <p className="font-semibold text-foreground">{label}</p>
-      <p className="inline-flex max-w-full items-center gap-1.5 text-xs font-bold leading-5 text-muted-foreground">
-        <span className={cn("h-1.5 w-1.5 shrink-0 animate-soft-pulse rounded-full", dotClass)} />
-        <span className="min-w-0 break-words">{value}</span>
-      </p>
-    </div>
-  </li>
-);
+
 
 const ActionRow = ({
   Icon,

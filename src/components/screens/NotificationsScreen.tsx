@@ -4,7 +4,6 @@ import { AlertType } from "@/data/medicine";
 import { AppLanguage } from "@/lib/appLanguage";
 import {
   AppNotification,
-  demoNotifications,
   getNotificationTimeline,
   groupNotifications,
   loadAppNotifications,
@@ -24,20 +23,18 @@ const tamilLabels = {
   subtitle: "சமீபத்திய எச்சரிக்கைகள்",
   urgent: "கவனம்",
   emptyTitle: "எச்சரிக்கைகள் இல்லை",
-  emptyBody: "மருந்து, இருப்பு, புளூடூத் நிகழ்வுகள் இங்கே தோன்றும்.",
+  emptyBody: "மருந்து மற்றும் இருப்பு நிகழ்வுகள் இங்கே தோன்றும்.",
 };
 
 const NotificationsScreen = ({
   language = "en",
-  demoMode = false,
   notifications,
 }: {
   language?: AppLanguage;
-  demoMode?: boolean;
   notifications?: AppNotification[];
 }) => {
   const notificationHistory = groupNotifications(
-    getNotificationTimeline(notifications ?? (demoMode ? demoNotifications : loadAppNotifications()))
+    getNotificationTimeline(notifications ?? loadAppNotifications())
   );
   const groupedNotifications = notificationHistory.reduce<Record<string, typeof notificationHistory>>((acc, alert) => {
     (acc[alert.group] ||= []).push(alert);
@@ -65,7 +62,7 @@ const NotificationsScreen = ({
           subtitle: `${notificationHistory.length} recent alerts`,
           urgent: "urgent",
           emptyTitle: "No alerts yet",
-          emptyBody: "Dose, stock, expiry, and Bluetooth events will appear here.",
+          emptyBody: "Dose, stock, and expiry events will appear here.",
         };
 
   return (

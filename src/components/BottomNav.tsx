@@ -1,8 +1,8 @@
-import { Bell, Bluetooth, Home, Settings } from "lucide-react";
+import { Bell, Home, Clock, User } from "lucide-react";
 import { AppLanguage } from "@/lib/appLanguage";
 import { cn } from "@/lib/utils";
 
-export type Screen = "home" | "notifications" | "settings" | "bluetooth";
+export type Screen = "home" | "notifications" | "settings" | "profile";
 
 interface BottomNavProps {
   active: Screen;
@@ -14,22 +14,22 @@ const navLabels: Record<AppLanguage, Record<Screen, string>> = {
   en: {
     home: "Home",
     notifications: "Alerts",
-    bluetooth: "Connect",
-    settings: "Settings",
+    settings: "Reminders",
+    profile: "Profile",
   },
   ta: {
     home: "முகப்பு",
-    notifications: "எச்சரிக்கை",
-    bluetooth: "இணைப்பு",
-    settings: "அமைப்பு",
+    notifications: "அறிவிப்புகள்",
+    settings: "நினைவூட்டல்கள்",
+    profile: "சுயவிவரம்",
   },
 };
 
 const items: { id: Screen; Icon: typeof Home }[] = [
   { id: "home", Icon: Home },
   { id: "notifications", Icon: Bell },
-  { id: "bluetooth", Icon: Bluetooth },
-  { id: "settings", Icon: Settings },
+  { id: "settings", Icon: Clock },
+  { id: "profile", Icon: User },
 ];
 
 const BottomNav = ({ active, onChange, language = "en" }: BottomNavProps) => {

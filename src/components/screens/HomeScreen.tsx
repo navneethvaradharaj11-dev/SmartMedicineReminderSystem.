@@ -8,7 +8,6 @@ import {
   Sparkles,
   TrendingUp,
   Flame,
-  Bluetooth,
   Moon,
   Sun,
   Package,
@@ -87,12 +86,6 @@ interface HomeScreenProps {
   onToggleLanguage: () => void;
   onLogout: () => void;
   onTriggerReminder: () => void;
-  onOpenProfile: () => void;
-  pillBoxConnected: boolean;
-  pillBoxBusy: boolean;
-  demoMode?: boolean;
-  onTogglePillBox: () => void;
-  onToggleDemoMode?: () => void;
   onMarkSmartReminderTaken?: () => void;
   onTrackDose: (scheduleId: string, status: DoseTrackingStatus) => void;
 }
@@ -108,12 +101,6 @@ const HomeScreen = ({
   onToggleLanguage,
   onLogout,
   onTriggerReminder,
-  onOpenProfile,
-  pillBoxConnected,
-  pillBoxBusy,
-  demoMode = false,
-  onTogglePillBox,
-  onToggleDemoMode,
   onMarkSmartReminderTaken,
   onTrackDose,
 }: HomeScreenProps) => {
@@ -138,8 +125,20 @@ const HomeScreen = ({
   );
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
+    const updateClock = () => setNow(new Date());
+    const nowDate = new Date();
+    const delayUntilNextMinute = (60 - nowDate.getSeconds()) * 1000 - nowDate.getMilliseconds();
+    let intervalId: number | undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      updateClock();
+      intervalId = window.setInterval(updateClock, 60000);
+    }, Math.max(1000, delayUntilNextMinute));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId) window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
@@ -204,21 +203,45 @@ const HomeScreen = ({
   const weekTaken = weeklyTrend.reduce((sum, day) => sum + day.taken, 0);
   const weekTotal = weeklyTrend.reduce((sum, day) => sum + day.total, 0);
   const weekPercent = Math.round((weekTaken / Math.max(weekTotal, 1)) * 100);
-  const currentStreak = [...weeklyTrend].reverse().reduce(
-    (streak, day) => {
-      if (streak.done) return streak;
-      if (day.value === 100 && day.total > 0) return { count: streak.count + 1, done: false };
-      return { count: streak.count, done: true };
-    },
-    { count: 0, done: false }
-  ).count;
+  const currentStreak = useMemo(() => {
+    let streakCount = 0;
+    const reversedTrend = [...weeklyTrend].reverse();
+    
+    for (let i = 0; i < reversedTrend.length; i++) {
+      const day = reversedTrend[i];
+      const isToday = i === 0;
+      
+      if (day.total === 0) {
+        continue;
+      }
+      
+      const isPerfect = day.taken === day.total;
+      
+      if (isToday) {
+        if (isPerfect) {
+          streakCount++;
+        } else if (day.missed > 0) {
+          break;
+        }
+      } else {
+        if (isPerfect) {
+          streakCount++;
+        } else {
+          break;
+        }
+      }
+    }
+    return streakCount;
+  }, [weeklyTrend]);
+
   const weekDetailItems = weeklyTrend.map((day) => ({
     title: day.label,
-    subtitle: `${day.taken}/${day.total} ${language === "ta" ? "மருந்துகள் எடுத்தார்" : "doses taken"}`,
+    subtitle: `${day.taken}/${day.total} ${language === "ta" ? "மாத்திரைகள் உட்கொள்ளப்பட்டன" : "doses taken"}`,
     tone: day.value === 100 ? "success" : day.value === 0 ? "destructive" : "warning",
     badge: `${day.value}%`,
     Icon: day.value === 100 ? CheckCircle2 : TrendingUp,
   }));
+
   const groupedHistory = {
     [language === "ta" ? "இன்று" : "Today"]: todayTrackedDoses.map(({ schedule, status }) => {
       const { medicineName, dosage } = splitScheduleName(schedule.name);
@@ -232,6 +255,7 @@ const HomeScreen = ({
       };
     }),
   };
+
   const copy =
     language === "ta"
       ? {
@@ -244,37 +268,37 @@ const HomeScreen = ({
           pillBox: {
             connecting: "இணைக்கப்படுகிறது...",
             connected: "மருந்துப் பெட்டி",
-            disconnected: "மருந்துப் பெட்டி ஆஃப்",
+            disconnected: "ஆஃப்லைன்",
           },
           theme: {
             day: "பகல் நிலை",
             night: "இரவு நிலை",
           },
           languageLabel: "தமிழ்",
-          nextMedicine: "அடுத்த மருந்து",
+          nextMedicine: "அடுத்த வேளை மருந்து",
           inTwelveMinutes: "12 நிமிடங்களில்",
           withFood: "உணவுடன்",
-          dueNow: "இப்போது எடுத்துக்கொள்ளவும்",
-          allTaken: "அனைத்தும் எடுத்துவிட்டீர்கள்",
-          missed: "தவறிவிட்டது",
-          markAsTaken: "எடுத்ததாக குறிக்கவும்",
-          markedAsTaken: "எடுத்ததாக குறிக்கப்பட்டது",
-          previewReminder: "நினைவூட்டலை முன்னோட்டமாக பார்க்கவும்",
+          dueNow: "உடனே உட்கொள்ளவும்",
+          allTaken: "அனைத்தும் உட்கொள்ளப்பட்டன",
+          missed: "தவறவிடப்பட்டது",
+          markAsTaken: "உட்கொண்டதாகக் குறிக்கவும்",
+          markedAsTaken: "உட்கொண்டதாகக் குறிக்கப்பட்டது",
+          previewReminder: "நினைவூட்டல் முன்னோட்டம்",
           stats: {
             today: "இன்று",
             week: "இந்த வாரம்",
             streak: "தொடர் நாட்கள்",
-            medicines: "மருந்துகள்",
+            medicines: "மாத்திரைகள்",
             lowStock: "குறைந்த இருப்பு",
             expiring: "காலாவதி அருகில்",
           },
           details: {
-            todayTitle: "இன்றைய மருந்துகள்",
-            todayDescription: `${todayTrackedDoses.length} இல் ${todayTaken} மருந்துகள் எடுத்துவிட்டீர்கள்`,
-            taken: "எடுத்தார்",
-            missed: "தவறியது",
-            weeklyTitle: "வாராந்திர பின்பற்றல்",
-            weeklyDescription: `${weekPercent}% - இந்த வாரம் ${weekTotal} இல் ${weekTaken} முறை எடுத்தார்`,
+            todayTitle: "இன்றைய மருந்து விபரம்",
+            todayDescription: `${todayTaken}/${todayTrackedDoses.length} உட்கொள்ளப்பட்டது`,
+            taken: "உட்கொள்ளப்பட்டது",
+            missed: "தவறவிடப்பட்டது",
+            weeklyTitle: "வாராந்திர பின்பற்றல் விகிதம்",
+            weeklyDescription: `${weekPercent}% - இந்த வாரம் ${weekTotal} இல் ${weekTaken} முறை உட்கொள்ளப்பட்டது`,
             streakTitle: "தற்போதைய தொடர்",
             streakDescription: `${currentStreak} நாட்கள் தொடர்ந்து`,
             bestStreak: "சிறந்த தொடர்",
@@ -284,19 +308,19 @@ const HomeScreen = ({
             nextMilestone: "அடுத்த இலக்கு",
             weekBadge: "1 வார பேட்ஜ்",
             oneDayToGo: "இன்னும் 1 நாள்",
-            medicinesTitle: "அனைத்து மருந்துகள்",
-            medicinesDescription: `${totalMeds} செயலில் உள்ள மருந்துகள்`,
+            medicinesTitle: "அனைத்து மாத்திரைகள்",
+            medicinesDescription: `${totalMeds} செயலில் உள்ளவை`,
             dailyAt: "தினமும்",
             active: "செயலில்",
             off: "ஆஃப்",
             lowStockTitle: "குறைந்த இருப்பு",
             lowStockDescription:
               lowStockMeds.length === 0
-                ? "அனைத்து மருந்துகளும் போதுமான அளவில் உள்ளன"
-                : `${lowStockMeds.length} மருந்துகளின் இருப்பு குறைந்துள்ளது`,
+                ? "அனைத்து மாத்திரைகளும் போதுமான அளவில் உள்ளன"
+                : `${lowStockMeds.length} மாத்திரைகளின் இருப்பு குறைவாக உள்ளது`,
             tabletsRemaining: "மாத்திரைகள் மட்டும் மீதம்",
             left: "மீதம்",
-            stockedUp: "உங்கள் இருப்பு போதுமானது",
+            stockedUp: "மாத்திரை இருப்பு போதுமானதாக உள்ளது",
             expiringTitle: "விரைவில் காலாவதியாகும்",
             expiringDescription:
               expiringMeds.length === 0
@@ -305,10 +329,9 @@ const HomeScreen = ({
             expiresIn: "காலாவதி இன்னும்",
             day: "நாள்",
             days: "நாட்கள்",
-            fresh: "புதியது",
+            fresh: "நல்ல நிலையில் உள்ளது",
             expired: "காலாவதியானது",
-            allFresh: "அனைத்து மருந்துகளும் புதியவை",
-            nothingHere: "இங்கு எதுவும் இல்லை",
+            nothingHere: "பதிவுகள் இல்லை",
           },
         }
       : {
@@ -514,15 +537,6 @@ const HomeScreen = ({
               >
                 <LogOut className="h-4 w-4" strokeWidth={2.4} />
               </button>
-
-              <button
-                onClick={onOpenProfile}
-                aria-label="Open profile"
-                title="Profile"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-base font-bold ring-2 ring-white/30 backdrop-blur transition-all hover:bg-white/30 active:scale-95"
-              >
-                {initial}
-              </button>
             </div>
           </div>
 
@@ -537,19 +551,6 @@ const HomeScreen = ({
               <span className="min-w-0 break-words text-xs font-bold leading-4">{statusConfig.label}</span>
             </div>
             <ConnPillButton
-              Icon={Bluetooth}
-              label={
-                pillBoxBusy
-                  ? copy.pillBox.connecting
-                  : pillBoxConnected
-                    ? copy.pillBox.connected
-                    : copy.pillBox.disconnected
-              }
-              connected={pillBoxConnected}
-              busy={pillBoxBusy}
-              onClick={onTogglePillBox}
-            />
-            <ConnPillButton
               Icon={isNight ? Moon : Sun}
               label={isNight ? copy.theme.night : copy.theme.day}
               connected={true}
@@ -561,14 +562,6 @@ const HomeScreen = ({
               connected={true}
               onClick={onToggleLanguage}
             />
-            {onToggleDemoMode && (
-              <ConnPillButton
-                Icon={Sparkles}
-                label={demoMode ? "Demo on" : "Demo mode"}
-                connected={demoMode}
-                onClick={onToggleDemoMode}
-              />
-            )}
           </div>
         </div>
       </div>
@@ -627,18 +620,11 @@ const HomeScreen = ({
             {status === "taken" ? copy.markedAsTaken : copy.markAsTaken}
           </Button>
 
-          <button
-            onClick={onTriggerReminder}
-            className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl px-3 py-2 text-center text-sm font-semibold leading-5 text-primary transition-colors hover:bg-primary-soft"
-          >
-            <Bell className="h-4 w-4" />
-            {copy.previewReminder}
-          </button>
         </div>
       </div>
 
       <div className="mt-4 px-4 sm:px-5">
-        <div className="mx-auto grid w-full max-w-xl grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-3">
+        <div className="mx-auto grid w-full max-w-xl grid-cols-3 gap-3">
           <Stat
             Icon={CheckCircle2}
             label={copy.stats.today}
@@ -660,11 +646,6 @@ const HomeScreen = ({
             tone="warning"
             onClick={() => announceStatButton(copy.stats.streak, "streak")}
           />
-        </div>
-      </div>
-
-      <div className="mt-3 px-4 sm:px-5">
-        <div className="mx-auto grid w-full max-w-xl grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-3">
           <Stat
             Icon={Pill}
             label={copy.stats.medicines}
@@ -688,6 +669,7 @@ const HomeScreen = ({
           />
         </div>
       </div>
+
 
       <div className="mt-3 px-4 sm:px-5">
         <div className="mx-auto w-full max-w-xl">
@@ -849,7 +831,7 @@ const ConnPillButton = ({
   busy,
   onClick,
 }: {
-  Icon: typeof Bluetooth;
+  Icon: typeof Clock;
   label: string;
   connected: boolean;
   busy?: boolean;
@@ -911,7 +893,7 @@ const Stat = ({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-card transition-all hover:shadow-soft active:scale-[0.97]"
+      className="h-full min-w-0 rounded-2xl border border-border/60 bg-card px-2.5 py-3 text-left shadow-card transition-all hover:shadow-soft active:scale-[0.97]"
     >
       <div className={cn("mb-2 flex h-8 w-8 items-center justify-center rounded-xl", tones[tone])}>
         <Icon className="h-4 w-4" strokeWidth={2.5} />

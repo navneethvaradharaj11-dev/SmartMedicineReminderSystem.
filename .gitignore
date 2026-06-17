@@ -12,28 +12,13 @@ dist
 dist-ssr
 *.local
 
-# Secrets and local environment
-.env
-.env.*
-!.env.example
-
 # Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-venv/
-env/
 
 # Local generated bundles
 share_for_claude/
 *.zip
-
-# Build and coverage output
-build/
-coverage/
 
 # Editor directories and files
 .vscode/*
@@ -45,3 +30,5 @@ coverage/
 *.njsproj
 *.sln
 *.sw?
+*.apk
+*.png

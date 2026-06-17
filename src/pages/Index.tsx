@@ -20,44 +20,31 @@ import {
 import {
   addAppNotification,
   AppNotification,
-  demoNotifications,
   loadAppNotifications,
   saveAppNotifications,
 } from "@/lib/appNotifications";
 import { toast } from "sonner";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+import { TextToSpeech } from "@capacitor-community/text-to-speech";
+
+interface RingtonePickerPlugin {
+  pickRingtone(options?: { existingUri?: string }): Promise<{ uri: string; title: string }>;
+  playRingtone(options: { uri: string }): Promise<void>;
+  stopRingtone(): Promise<void>;
+  maximizeMediaVolume(): Promise<void>;
+  openTtsSettings(): Promise<void>;
+}
+
+const RingtonePicker = registerPlugin<RingtonePickerPlugin>("RingtonePicker");
 
 const HomeScreen = lazy(() => import("@/components/screens/HomeScreen"));
 const NotificationsScreen = lazy(() => import("@/components/screens/NotificationsScreen"));
 const SettingsScreen = lazy(() => import("@/components/screens/SettingsScreen"));
-const BluetoothScreen = lazy(() => import("@/components/screens/BluetoothScreen"));
 const ProfileScreen = lazy(() => import("@/components/screens/ProfileScreen"));
 
-type ConnectionTransport = "serial" | "bluetooth" | null;
-type NativeBluetoothDevice = {
-  name?: string;
-  address?: string;
-  connected?: boolean;
-  source?: "bluetooth-le" | "bluetooth-classic" | "unknown";
-};
-
-type NativeBluetoothSnapshot = {
-  supported?: boolean;
-  devices?: NativeBluetoothDevice[];
-  updatedAt?: string;
-  error?: string;
-  sourceUrl?: string;
-};
-type BrowserBluetoothDevice = any;
-type BrowserSerialPort = any;
 type FontSizePreference = "small" | "medium" | "large";
 export type DoseTrackingStatus = "taken" | "missed";
-type HardwareDoseEvent = {
-  action: "ALERT" | "CONFIRMED" | "MISSED" | "SNOOZED" | "BUTTON";
-  doseIndex: number | null;
-  label: string;
-  detail?: string;
-  time?: string;
-};
 export interface DoseTrackingRecord {
   scheduleId: string;
   dateKey: string;
@@ -65,29 +52,72 @@ export interface DoseTrackingRecord {
   updatedAt: string;
 }
 
-const SWIPEABLE_SCREENS: Screen[] = ["home", "notifications", "bluetooth", "settings"];
+const SWIPEABLE_SCREENS: Screen[] = ["home", "notifications", "settings", "profile"];
 const SWIPE_THRESHOLD_PX = 70;
 const SWIPE_MAX_VERTICAL_DRIFT_PX = 90;
-const DEVICE_REFRESH_INTERVAL_MS = 1500;
-const LIVE_CONNECTION_CHECK_INTERVAL_MS = 750;
-const NATIVE_BLUETOOTH_STATUS_URLS = [
-  "/api/native-bluetooth/status",
-  "http://127.0.0.1:8765/api/native-bluetooth/status",
-];
 const MEDICINE_SCHEDULES_STORAGE_KEY = "gentle-dose-medicine-schedules-v1";
 const SNOOZE_MINUTES_STORAGE_KEY = "gentle-dose-snooze-minutes";
 const DOSE_TRACKING_STORAGE_KEY = "gentle-dose-dose-tracking-v1";
 const VOICE_GUIDANCE_STORAGE_KEY = "gentle-dose-voice-guidance";
 const REMINDERS_ENABLED_STORAGE_KEY = "gentle-dose-reminders-enabled";
 const SOUND_ALERTS_STORAGE_KEY = "gentle-dose-sound-alerts";
-const DEMO_MODE_STORAGE_KEY = "gentle-dose-demo-mode";
 
-const demoMedicineSchedules: Schedule[] = [
-  { id: "demo-s1", name: "Metformin - 500 mg", time: "9:30 AM", enabled: true, stock: 22, expiresInDays: 120 },
-  { id: "demo-s2", name: "Atorvastatin - 10 mg", time: "8:00 AM", enabled: true, stock: 14, expiresInDays: 60 },
-  { id: "demo-s3", name: "Aspirin - 75 mg", time: "8:00 AM", enabled: true, stock: 5, expiresInDays: 200 },
-  { id: "demo-s4", name: "Vitamin D", time: "1:00 PM", enabled: true, stock: 30, expiresInDays: 7 },
+const getNotificationId = (strId: string): number => {
+  let hash = 0;
+  for (let i = 0; i < strId.length; i++) {
+    hash = strId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash | 0) % 2000000000;
+};
+
+const HEALTH_SUGGESTIONS_EN = [
+  "Take your medicine with a full glass of water.",
+  "Consistency is key! Try to take it at the same time every day.",
+  "Check if this medicine should be taken before or after meals.",
+  "Stay hydrated today! Drink plenty of water.",
+  "A quick walk after your meal can help with digestion.",
+  "Keep your medicines stored in a cool, dry place.",
+  "If you feel dizzy, rest for a few minutes after taking your medicine.",
+  "Remember: your health is your greatest wealth!"
 ];
+
+const HEALTH_SUGGESTIONS_TA = [
+  "உங்கள் மருந்தை ஒரு முழு கிளாஸ் தண்ணீருடன் எடுத்துக் கொள்ளுங்கள்.",
+  "ஒரே நேரத்தில் மருந்து உட்கொள்வது சிறந்த பலனைத் தரும்.",
+  "இந்த மருந்தை உணவுக்கு முன் அல்லது பின் எடுக்க வேண்டுமா என்று சரிபார்க்கவும்.",
+  "இன்று உடலை நீரேற்றமாக வைத்திருங்கள்! நிறைய தண்ணீர் குடிக்கவும்.",
+  "உணவுக்குப் பிறகு ஒரு சிறிய நடைப்பயிற்சி செரிமானத்திற்கு உதவும்.",
+  "மருந்துகளை குளிர்ந்த, உலர்ந்த இடத்தில் சேமித்து வைக்கவும்.",
+  "மயக்கமாக உணர்ந்தால், மருந்து எடுத்த பின் சில நிமிடங்கள் ஓய்வெடுங்கள்.",
+  "உடல் நலமே சிறந்த செல்வம் என்பதை நினைவில் வையுங்கள்!"
+];
+
+const isAndroidWebViewRuntime = () =>
+  typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
+
+
+const scheduleTimeToMinutes = (time: string) => {
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = match[3].toUpperCase();
+  const hour24 = period === "AM" ? hour % 12 : (hour % 12) + 12;
+  return hour24 * 60 + minute;
+};
+
+const scheduleToReminder = (schedule: Schedule): MedicineTimeReminder => {
+  const [medicineName, ...dosageParts] = schedule.name.split(/\s+-\s+/);
+  return {
+    scheduleId: schedule.id,
+    medicineName: medicineName.trim() || schedule.name,
+    dosage: dosageParts.join(" - ").trim() || "Scheduled medicine",
+    time: schedule.time,
+  };
+};
+
 
 const ScreenLoading = () => (
   <div className="flex min-h-0 flex-1 items-center justify-center bg-page px-6 text-center">
@@ -141,141 +171,8 @@ const addDays = (date: Date, amount: number) => {
   return next;
 };
 
-const createDemoDoseTrackingRecords = (date = new Date()): DoseTrackingRecord[] => {
-  const demoPattern: DoseTrackingStatus[][] = [
-    ["taken", "taken", "taken", "taken"],
-    ["taken", "taken", "taken", "taken"],
-    ["taken", "taken", "taken", "missed"],
-    ["taken", "taken", "taken", "taken"],
-    ["taken", "taken", "missed", "taken"],
-    ["taken", "taken", "taken", "taken"],
-    ["taken", "missed", "taken", "taken"],
-  ];
-
-  return demoPattern.flatMap((statuses, dayIndex) => {
-    const dateKey = getLocalDateKey(addDays(date, dayIndex - (demoPattern.length - 1)));
-    return statuses.map((status, scheduleIndex) => ({
-      scheduleId: demoMedicineSchedules[scheduleIndex].id,
-      dateKey,
-      status,
-      updatedAt: `${dateKey}T09:${String(30 + scheduleIndex).padStart(2, "0")}:00.000Z`,
-    }));
-  });
-};
-
-const createDemoSmartMedicineSchedules = (date = new Date()): SmartMedicineSchedule[] => {
-  const startDate = getLocalDateKey(addDays(date, -6));
-  const endDate = getLocalDateKey(addDays(date, 8));
-  const slots = [
-    { id: "demo-course-morning", kind: "morning" as const, label: "Morning", time: "08:00" },
-    { id: "demo-course-night", kind: "night" as const, label: "Night", time: "20:00" },
-  ];
-  const statusByOffset = new Map<number, SmartMedicineDayStatus>([
-    [-6, "taken"],
-    [-5, "taken"],
-    [-4, "taken"],
-    [-3, "missed"],
-    [-2, "taken"],
-    [-1, "taken"],
-    [0, "pending"],
-  ]);
-
-  const dailyStatus = Object.fromEntries(
-    Array.from({ length: 15 }, (_, index) => {
-      const offset = index - 6;
-      const dateKey = getLocalDateKey(addDays(date, offset));
-      const status = statusByOffset.get(offset) ?? "pending";
-
-      return [
-        dateKey,
-        {
-          date: dateKey,
-          status,
-          slotStatus: Object.fromEntries(slots.map((slot) => [slot.id, status])),
-          updatedAt: offset <= 0 ? `${dateKey}T08:05:00.000Z` : undefined,
-        },
-      ];
-    })
-  );
-
-  return [
-    {
-      id: "demo-course-amoxicillin",
-      medicineName: "Amoxicillin - 5 day recovery course",
-      startDate,
-      endDate,
-      timeSlots: slots,
-      dailyStatus,
-      createdAt: `${startDate}T07:30:00.000Z`,
-    },
-  ];
-};
-
-const scheduleTimeToMinutes = (time: string) => {
-  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return null;
-
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const period = match[3].toUpperCase();
-  const hour24 = period === "AM" ? hour % 12 : (hour % 12) + 12;
-  return hour24 * 60 + minute;
-};
-
-const scheduleToReminder = (schedule: Schedule): MedicineTimeReminder => {
-  const [medicineName, ...dosageParts] = schedule.name.split(/\s+-\s+/);
-  return {
-    scheduleId: schedule.id,
-    medicineName: medicineName.trim() || schedule.name,
-    dosage: dosageParts.join(" - ").trim() || "Scheduled medicine",
-    time: schedule.time,
-  };
-};
-
-const formatHardwareReminderTime = (time?: string) => {
-  if (!time) return "Hardware reminder";
-
-  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-  if (!match) return time;
-
-  const hour24 = Number(match[1]);
-  const minute = match[2];
-  const period = hour24 >= 12 ? "PM" : "AM";
-  const hour12 = hour24 % 12 || 12;
-  return `${hour12}:${minute} ${period}`;
-};
-
-const parseHardwareDoseEvent = (line: string): HardwareDoseEvent | null => {
-  const parts = line.split("|").map((part) => part.trim());
-  if (parts[0] !== "BT") return null;
-
-  const action = parts[1] as HardwareDoseEvent["action"];
-  if (
-    action !== "ALERT" &&
-    action !== "CONFIRMED" &&
-    action !== "MISSED" &&
-    action !== "SNOOZED" &&
-    action !== "BUTTON"
-  ) {
-    return null;
-  }
-
-  const label = parts[2] || "Dose";
-  const doseMatch = label.match(/dose\s+(\d+)/i);
-  const doseIndex = doseMatch ? Number(doseMatch[1]) - 1 : null;
-
-  return {
-    action,
-    doseIndex: doseIndex !== null && Number.isFinite(doseIndex) ? doseIndex : null,
-    label,
-    detail: parts[3],
-    time: parts[4] || (action === "ALERT" ? parts[3] : undefined),
-  };
-};
-
 const Index = () => {
   const [screen, setScreen] = useState<Screen>("home");
-  const [profileOpen, setProfileOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [medicineSchedules, setMedicineSchedules] = useState<Schedule[]>(loadMedicineSchedules);
   const [medicineReminder, setMedicineReminder] = useState<MedicineTimeReminder | null>(null);
@@ -294,6 +191,10 @@ const Index = () => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(VOICE_GUIDANCE_STORAGE_KEY) !== "off";
   });
+  const [voiceGender, setVoiceGender] = useState<"female" | "male">(() => {
+    if (typeof window === "undefined") return "female";
+    return (window.localStorage.getItem("gentle-dose-voice-gender") as "female" | "male") || "female";
+  });
   const [remindersEnabled, setRemindersEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(REMINDERS_ENABLED_STORAGE_KEY) !== "off";
@@ -302,9 +203,13 @@ const Index = () => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(SOUND_ALERTS_STORAGE_KEY) !== "off";
   });
-  const [demoMode, setDemoMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(DEMO_MODE_STORAGE_KEY) === "on";
+  const [ringtoneUri, setRingtoneUri] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("gentle-dose-ringtone-uri") || "";
+  });
+  const [ringtoneTitle, setRingtoneTitle] = useState(() => {
+    if (typeof window === "undefined") return "Default ringtone";
+    return window.localStorage.getItem("gentle-dose-ringtone-title") || "Default ringtone";
   });
   const [notificationEvents, setNotificationEvents] = useState<AppNotification[]>(() =>
     typeof window === "undefined" ? [] : loadAppNotifications()
@@ -313,6 +218,16 @@ const Index = () => {
     if (typeof window === "undefined") return "en";
     return window.localStorage.getItem("gentle-dose-language") === "ta" ? "ta" : "en";
   });
+
+  const medicineSchedulesRef = useRef(medicineSchedules);
+  const snoozeMinutesRef = useRef(snoozeMinutes);
+  const languageRef = useRef(language);
+  const remindersEnabledRef = useRef(remindersEnabled);
+
+  useEffect(() => { medicineSchedulesRef.current = medicineSchedules; }, [medicineSchedules]);
+  useEffect(() => { snoozeMinutesRef.current = snoozeMinutes; }, [snoozeMinutes]);
+  useEffect(() => { languageRef.current = language; }, [language]);
+  useEffect(() => { remindersEnabledRef.current = remindersEnabled; }, [remindersEnabled]);
 
   // Apply theme to <html>
   useEffect(() => {
@@ -354,6 +269,10 @@ const Index = () => {
   }, [voiceGuidance]);
 
   useEffect(() => {
+    window.localStorage.setItem("gentle-dose-voice-gender", voiceGender);
+  }, [voiceGender]);
+
+  useEffect(() => {
     window.localStorage.setItem(REMINDERS_ENABLED_STORAGE_KEY, remindersEnabled ? "on" : "off");
   }, [remindersEnabled]);
 
@@ -362,8 +281,300 @@ const Index = () => {
   }, [soundAlerts]);
 
   useEffect(() => {
-    window.localStorage.setItem(DEMO_MODE_STORAGE_KEY, demoMode ? "on" : "off");
-  }, [demoMode]);
+    window.localStorage.setItem("gentle-dose-ringtone-uri", ringtoneUri);
+  }, [ringtoneUri]);
+
+  useEffect(() => {
+    window.localStorage.setItem("gentle-dose-ringtone-title", ringtoneTitle);
+  }, [ringtoneTitle]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const registerActions = async () => {
+      try {
+        await LocalNotifications.registerActionTypes({
+          types: [
+            {
+              id: 'MEDICINE_ACTIONS',
+              actions: [
+                {
+                  id: 'take',
+                  title: language === 'ta' ? 'எடுத்துக்கொண்டேன்' : 'Mark as Taken',
+                  foreground: true
+                },
+                {
+                  id: 'snooze',
+                  title: language === 'ta' ? 'ஒத்திவை' : 'Snooze',
+                  foreground: true
+                }
+              ]
+            }
+          ]
+        });
+        console.log("Successfully registered notification action types");
+      } catch (err) {
+        console.error("Failed to register notification action types:", err);
+      }
+    };
+
+    registerActions();
+  }, [language]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let listenerHandle: any;
+    LocalNotifications.addListener(
+      'localNotificationActionPerformed',
+      async (notificationAction) => {
+        const actionId = notificationAction.actionId;
+        const notification = notificationAction.notification;
+        console.log("Local notification action received:", actionId, notification);
+
+        const extra = notification.extra;
+        if (!extra || !extra.scheduleId) return;
+
+        const scheduleId = extra.scheduleId;
+        const medicineName = extra.medicineName;
+        const dosage = extra.dosage;
+        const time = extra.time;
+
+        if (actionId === 'take') {
+          handleTrackDose(scheduleId, 'taken');
+          
+          toast.success(
+            languageRef.current === 'ta' ? 'மருந்து உட்கொண்டதாகக் குறிக்கப்பட்டது' : 'Marked as taken',
+            { description: languageRef.current === 'ta' ? 'அறிவிப்பிலிருந்து உறுதி செய்யப்பட்டது' : 'Confirmed from notification action.' }
+          );
+          speak(
+            languageRef.current === 'ta' ? 'மருந்து உட்கொண்டதாகக் குறிக்கப்பட்டது.' : 'Medicine marked as taken.',
+            { force: true }
+          );
+        } else if (actionId === 'snooze') {
+          const currentSnoozeMinutes = snoozeMinutesRef.current;
+          const currentLanguage = languageRef.current;
+          
+          const snoozeKey = `snooze:${scheduleId}`;
+          const snoozeTime = new Date(Date.now() + currentSnoozeMinutes * 60 * 1000);
+          window.localStorage.setItem(snoozeKey, snoozeTime.toISOString());
+
+          const hashId = getNotificationId(scheduleId) + 9999;
+          
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                id: hashId,
+                title: currentLanguage === 'ta' ? 'ஒத்திவைக்கப்பட்ட நினைவூட்டல்' : 'Snoozed Reminder',
+                body: currentLanguage === 'ta'
+                  ? `மீண்டும் நினைவூட்டல்: ${medicineName} (${dosage})`
+                  : `Snoozed reminder: ${medicineName} (${dosage})`,
+                channelId: 'medicine-reminders',
+                actionTypeId: 'MEDICINE_ACTIONS',
+                extra: {
+                  scheduleId,
+                  medicineName,
+                  dosage,
+                  time
+                },
+                schedule: {
+                  at: snoozeTime,
+                  allowWhileIdle: true
+                }
+              }
+            ]
+          });
+
+          toast(
+            currentLanguage === 'ta'
+              ? `${currentSnoozeMinutes} நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டுள்ளது`
+              : `Snoozed for ${currentSnoozeMinutes} minute${currentSnoozeMinutes === 1 ? '' : 's'}`
+          );
+          
+          speak(
+            currentLanguage === 'ta'
+              ? `நினைவூட்டல் ${currentSnoozeMinutes} நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டுள்ளது.`
+              : `Reminder snoozed for ${currentSnoozeMinutes} minutes.`,
+            { force: true }
+          );
+        }
+      }
+    ).then((handle) => {
+      listenerHandle = handle;
+    });
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, []);
+
+  const rescheduleLocalNotifications = useCallback(async (schedules: Schedule[], enabled: boolean) => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      const pending = await LocalNotifications.getPending();
+      if (pending && pending.notifications.length > 0) {
+        await LocalNotifications.cancel({
+          notifications: pending.notifications.map((n) => ({ id: n.id }))
+        });
+      }
+
+      if (!enabled) return;
+
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== "granted") {
+        const req = await LocalNotifications.requestPermissions();
+        if (req.display !== "granted") {
+          console.warn("Local notification permission not granted");
+          return;
+        }
+      }
+
+      await LocalNotifications.createChannel({
+        id: 'medicine-reminders',
+        name: 'Medicine Reminders',
+        description: 'Notifications for medicine intake schedules',
+        importance: 5,
+        visibility: 1,
+        vibration: true,
+      });
+
+      const notificationsToSchedule = [];
+      for (const schedule of schedules) {
+        if (!schedule.enabled) continue;
+
+        const timeMinutes = scheduleTimeToMinutes(schedule.time);
+        if (timeMinutes === null) continue;
+
+        const hour = Math.floor(timeMinutes / 60);
+        const minute = timeMinutes % 60;
+
+        const [medicineName, ...dosageParts] = schedule.name.split(/\s+-\s+/);
+        const dosage = dosageParts.join(" - ").trim() || "Scheduled medicine";
+
+        const suggestions = language === "ta" ? HEALTH_SUGGESTIONS_TA : HEALTH_SUGGESTIONS_EN;
+        const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+        
+        const baseBody = language === "ta"
+          ? `${medicineName} எடுத்துக்கொள்ள வேண்டிய நேரம். (${dosage} - ${schedule.time})`
+          : `It is time to take ${medicineName}. (${dosage} - ${schedule.time})`;
+
+        const fullBody = `${baseBody}\n💡 ${randomSuggestion}`;
+
+        notificationsToSchedule.push({
+          id: getNotificationId(schedule.id),
+          title: language === "ta" ? "மருந்து நினைவூட்டல்" : "Medicine Reminder",
+          body: fullBody,
+          channelId: 'medicine-reminders',
+          actionTypeId: 'MEDICINE_ACTIONS',
+          extra: {
+            scheduleId: schedule.id,
+            medicineName,
+            dosage,
+            time: schedule.time
+          },
+          schedule: {
+            on: {
+              hour,
+              minute
+            },
+            repeats: true,
+            allowWhileIdle: true
+          }
+        });
+      }
+
+      if (notificationsToSchedule.length > 0) {
+        await LocalNotifications.schedule({
+          notifications: notificationsToSchedule
+        });
+        console.log(`Successfully scheduled ${notificationsToSchedule.length} local notifications with action buttons`);
+      }
+    } catch (err) {
+      console.error("Failed to reschedule local notifications:", err);
+    }
+  }, [language]);
+
+  useEffect(() => {
+    rescheduleLocalNotifications(medicineSchedules, remindersEnabled);
+  }, [medicineSchedules, remindersEnabled, rescheduleLocalNotifications]);
+
+  const handleSelectRingtone = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.info(language === "ta" ? "ரிங்டோன் தேர்வு மொபைலில் மட்டுமே கிடைக்கும்" : "Ringtone picker is only available on mobile devices");
+      return;
+    }
+    try {
+      const result = await RingtonePicker.pickRingtone({ existingUri: ringtoneUri });
+      if (result && result.uri !== undefined) {
+        setRingtoneUri(result.uri);
+        setRingtoneTitle(result.title || "Default Sound");
+        toast.success(language === "ta" ? "ரிங்டோன் புதுப்பிக்கப்பட்டது" : "Alarm sound updated", {
+          description: result.title || "Default Sound"
+        });
+      }
+    } catch (err) {
+      console.error("Failed to pick ringtone:", err);
+    }
+  }, [ringtoneUri, language]);
+
+  const handleTestNotification = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.info(language === "ta" ? "அறிவிப்பு சோதனை மொபைலில் மட்டுமே கிடைக்கும்" : "Notification test is only available on mobile devices");
+      return;
+    }
+
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== "granted") {
+        const req = await LocalNotifications.requestPermissions();
+        if (req.display !== "granted") {
+          toast.error(language === "ta" ? "அறிவிப்பு அனுமதி மறுக்கப்பட்டது" : "Notification permission denied");
+          return;
+        }
+      }
+
+      const suggestions = language === "ta" ? HEALTH_SUGGESTIONS_TA : HEALTH_SUGGESTIONS_EN;
+      const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+      
+      const title = language === "ta" ? "சோதனை நினைவூட்டல்" : "Test Medicine Reminder";
+      const baseBody = language === "ta"
+        ? "மருந்து எடுப்பதற்கான சோதனை அறிவிப்பு. (இருப்பு - 1 மாத்திரை)"
+        : "This is a test notification for your medicine reminder. (1 tablet)";
+      const fullBody = `${baseBody}\n💡 ${randomSuggestion}`;
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: 99999,
+            title: title,
+            body: fullBody,
+            channelId: 'medicine-reminders',
+            actionTypeId: 'MEDICINE_ACTIONS',
+            extra: {
+              scheduleId: 's1',
+              medicineName: language === "ta" ? "மெட்ஃபார்மின்" : "Metformin",
+              dosage: "500 mg",
+              time: "9:30 AM"
+            },
+            schedule: {
+              at: new Date(Date.now() + 1000),
+              allowWhileIdle: true
+            }
+          }
+        ]
+      });
+
+      toast.success(language === "ta" ? "சோதனை அறிவிப்பு அனுப்பப்பட்டது!" : "Test notification sent!");
+    } catch (err) {
+      console.error("Failed to send test notification:", err);
+      toast.error(language === "ta" ? "அறிவிப்பு அனுப்ப முடியவில்லை" : "Failed to send test notification");
+    }
+  }, [language]);
+
+
 
   useEffect(() => {
     if (!userProfile || !remindersEnabled) return;
@@ -380,6 +591,26 @@ const Index = () => {
 
       if (!dueSchedule) return;
 
+      // 1. Check if already taken today
+      const alreadyTaken = doseTrackingRecords.some(
+        (record) => record.scheduleId === dueSchedule.id && record.dateKey === todayKey && record.status === "taken"
+      );
+      if (alreadyTaken) return;
+
+      // 2. Check if currently snoozed
+      const snoozeKey = `snooze:${dueSchedule.id}`;
+      const snoozedUntilStr = window.localStorage.getItem(snoozeKey);
+      if (snoozedUntilStr) {
+        try {
+          const snoozedUntil = new Date(snoozedUntilStr);
+          if (now < snoozedUntil) {
+            return; // Still snoozed, skip
+          }
+        } catch (e) {
+          console.error("Failed to parse snooze date:", e);
+        }
+      }
+
       const reminderKey = `${dueSchedule.id}:${todayKey}:${currentMinutes}`;
       if (triggeredMedicineReminderKeysRef.current.has(reminderKey)) return;
 
@@ -395,26 +626,10 @@ const Index = () => {
     };
 
     checkMedicineScheduleReminders();
-    const intervalId = window.setInterval(checkMedicineScheduleReminders, 15000);
+    const intervalId = window.setInterval(checkMedicineScheduleReminders, 1000);
     return () => window.clearInterval(intervalId);
-  }, [medicineSchedules, reminderOpen, remindersEnabled, userProfile]);
+  }, [medicineSchedules, reminderOpen, remindersEnabled, userProfile, doseTrackingRecords]);
 
-  // Global Bluetooth State
-  const [device, setDevice] = useState<BrowserBluetoothDevice | null>(null);
-  const [port, setPort] = useState<BrowserSerialPort | null>(null);
-  const [savedBluetoothDevices, setSavedBluetoothDevices] = useState<any[]>([]);
-  const [savedSerialPorts, setSavedSerialPorts] = useState<any[]>([]);
-  const [knownDeviceName, setKnownDeviceName] = useState<string>();
-  const [systemDeviceReady, setSystemDeviceReady] = useState(false);
-  const [pillBoxConnected, setPillBoxConnected] = useState(false);
-  const [pillBoxBusy, setPillBoxBusy] = useState(false);
-  const [connectionTransport, setConnectionTransport] = useState<ConnectionTransport>(null);
-  const [nativeConnectedDevice, setNativeConnectedDevice] = useState<NativeBluetoothDevice | null>(null);
-  const [nativeBluetoothSnapshot, setNativeBluetoothSnapshot] = useState<NativeBluetoothSnapshot | null>(null);
-  const serialReaderRef = useRef<any>(null);
-  const serialWriterBusyRef = useRef(false);
-  const strictDisconnectAnnouncedRef = useRef(false);
-  const blockedSerialPortRef = useRef<BrowserSerialPort | null>(null);
   const {
     smartSchedules,
     addSmartSchedule,
@@ -425,60 +640,20 @@ const Index = () => {
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipeLastRef = useRef<{ x: number; y: number } | null>(null);
   const lastTalkBackAnnouncementRef = useRef<{ key: string; time: number }>({ key: "", time: 0 });
-
-  const navAny = navigator as any;
-  const isWindows = /Windows/i.test(navigator.userAgent);
-  const supportsSerial = "serial" in navigator;
-  const supportsBluetooth = "bluetooth" in navigator;
-  const shouldPreferSerialConnection = isWindows && supportsSerial;
   const copy =
     language === "ta"
       ? {
-          pillBoxDisconnected: "மருந்துப் பெட்டி துண்டிக்கப்பட்டது",
-          bluetoothClosed: "புளூடூத் இணைப்பு மூடப்பட்டது",
-          openingWindowsPicker: "சாதனத் தேர்வியைத் திறக்கிறது...",
-          pillBoxConnected: "மருந்துப் பெட்டி இணைக்கப்பட்டது",
-          nativeSerialConnected: "சீரியல் சாதனத் தேர்வு மூலம் இணைக்கப்பட்டது",
-          connectingTo: (name: string) => `${name} சாதனத்துடன் இணைக்கப்படுகிறது...`,
-          pairedWith: (name: string) => `${name} சாதனத்துடன் இணைக்கப்பட்டது`,
-          connectionFailed: "இணைப்பு தோல்வியடைந்தது",
-          reconnectingSavedWindows: "சேமித்த சாதனத்துடன் மீண்டும் இணைக்கிறது...",
-          reconnectedSavedWindows: "சேமித்த சாதன அணுகலால் மீண்டும் இணைக்கப்பட்டது",
-          windowsPickerFailed: "சாதனத் தேர்வியைத் திறக்க முடியவில்லை",
-          reconnectingSavedBluetooth: (name: string) => `${name} சாதனத்துடன் மீண்டும் இணைக்கிறது...`,
-          reconnectedTo: (name: string) => `${name} சாதனத்துடன் மீண்டும் இணைக்கப்பட்டது`,
-          reconnectSavedBluetoothFailed: "சேமித்த புளூடூத் மீளிணைப்பு தோல்வியடைந்தது",
-          bluetoothReconnectFailed: "சேமித்த புளூடூத் சாதனத்துடன் மீண்டும் இணைக்க முடியவில்லை",
-          openBluetoothSettings: "உங்கள் சாதனத்தின் புளூடூத் அமைப்புகளைத் திறக்கவும்",
-          pairThenReturn: "முதலில் அங்கே மருந்துப் பெட்டியை இணைத்து, பிறகு இங்கே திரும்பி இணைப்பு பொத்தானை அழுத்தவும்.",
           signedOut: "வெளியேறிவிட்டீர்கள்",
-          markedTaken: "எடுத்ததாக குறிக்கப்பட்டது",
-          schedulePraise: "நீங்கள் நேரத்தை சரியாகப் பின்பற்றுகிறீர்கள்.",
-          snoozedTen: "10 நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டது",
+          markedTaken: "மருந்து உட்கொண்டதாகக் குறிக்கப்பட்டது",
+          schedulePraise: "மிகவும் நன்று! மாத்திரைகளைத் சரியான நேரத்திற்கு உட்கொள்கிறீர்கள்.",
+          snoozedTen: "10 நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டுள்ளது",
           voiceReminder: (name: string, time: string) =>
-            `${name} மருந்தை எடுத்துக்கொள்ள வேண்டிய நேரம். நேரம் ${time}.`,
-          voiceTaken: "மருந்து எடுத்ததாக குறிக்கப்பட்டது.",
-          voiceTakenHardware: "மருந்துப் பெட்டி பொத்தான் மூலம் மருந்து எடுத்ததாக உறுதி செய்யப்பட்டது.",
-          voiceSnoozed: (minutes: number) => `நினைவூட்டல் ${minutes} நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டது.`,
+            `${name} மாத்திரை உட்கொள்ளும் நேரம்: ${time}.`,
+          voiceTaken: "மருந்து உட்கொண்டதாகக் குறிக்கப்பட்டது.",
+          voiceTakenHardware: "மருந்துப் பெட்டி பொத்தான் மூலம் மருந்து உட்கொண்டது உறுதி செய்யப்பட்டது.",
+          voiceSnoozed: (minutes: number) => `நினைவூட்டல் ${minutes} நிமிடங்களுக்கு ஒத்திவைக்கப்பட்டுள்ளது.`,
         }
       : {
-          pillBoxDisconnected: "Pill box disconnected",
-          bluetoothClosed: "Bluetooth connection closed",
-          openingWindowsPicker: "Opening device picker...",
-          pillBoxConnected: "Pill box connected",
-          nativeSerialConnected: "Connected through the native serial picker",
-          connectingTo: (name: string) => `Connecting to ${name}...`,
-          pairedWith: (name: string) => `Paired with ${name}`,
-          connectionFailed: "Connection failed",
-          reconnectingSavedWindows: "Reconnecting to saved device...",
-          reconnectedSavedWindows: "Reconnected using saved device access",
-          windowsPickerFailed: "Failed to open the device picker",
-          reconnectingSavedBluetooth: (name: string) => `Reconnecting to ${name}...`,
-          reconnectedTo: (name: string) => `Reconnected to ${name}`,
-          reconnectSavedBluetoothFailed: "Saved Bluetooth reconnect failed",
-          bluetoothReconnectFailed: "Could not reconnect to the saved Bluetooth device",
-          openBluetoothSettings: "Open your device Bluetooth settings",
-          pairThenReturn: "Pair the pill box there first, then return here and tap Connect.",
           signedOut: "Signed out",
           markedTaken: "Marked as taken",
           schedulePraise: "Great job staying on schedule.",
@@ -506,7 +681,7 @@ const Index = () => {
       tone.type = "sine";
       tone.frequency.setValueAtTime(880, now);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.55, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.98, now + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
 
       tone.connect(gain);
@@ -519,44 +694,121 @@ const Index = () => {
     }
   }, [soundAlerts]);
 
-  const speak = useCallback(
-    (message: string, options: { force?: boolean; fallbackMessage?: string; cue?: boolean } = {}) => {
-      if ((!voiceGuidance && !options.force) || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const speakOnlineFallback = useCallback((text: string, lang: string) => {
+    try {
+      console.log(`[TTS Debug] Attempting online translation TTS fallback for text: "${text}"`);
+      const tl = lang.split("-")[0];
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${tl}&client=tw-ob&q=${encodeURIComponent(text)}`;
+      const audio = new Audio(url);
+      audio.volume = 1.0;
+      audio.play().then(() => {
+        console.log("[TTS Debug] Online translation TTS playback started successfully.");
+      }).catch((playErr) => {
+        console.error("[TTS Debug] Online translation TTS audio play failed:", playErr);
+      });
+    } catch (e) {
+      console.error("[TTS Debug] Online translation TTS creation failed:", e);
+    }
+  }, []);
 
+  const speakWeb = useCallback(
+    (spokenMessage: string, targetLang: string, options: { fallbackMessage?: string } = {}) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       const synth = window.speechSynthesis;
-      const targetLang = language === "ta" ? "ta-IN" : "en-US";
-
-      if (options.cue !== false) {
-        playVoiceCue();
-      }
 
       const speakWithAvailableVoices = (voices: SpeechSynthesisVoice[]) => {
-        const targetVoice =
-          voices.find((voice) => voice.lang.toLowerCase() === targetLang.toLowerCase()) ||
-          voices.find((voice) => voice.lang.toLowerCase().startsWith(language === "ta" ? "ta" : "en"));
-        const englishFallbackVoice =
-          voices.find((voice) => voice.lang.toLowerCase() === "en-in") ||
-          voices.find((voice) => voice.lang.toLowerCase().startsWith("en"));
+        // Filter voices by language
+        let langVoices = voices.filter((voice) =>
+          voice.lang.toLowerCase().startsWith(language === "ta" ? "ta" : "en")
+        );
+        if (langVoices.length === 0) {
+          langVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith("en"));
+        }
 
-        // Keep Tamil text as Tamil. Some browsers can speak ta-IN by lang even
-        // before exposing the voice object through getVoices().
-        const shouldUseEnglishFallback = language !== "ta" && !targetVoice && options.fallbackMessage;
-        const spokenMessage = shouldUseEnglishFallback ? options.fallbackMessage || message : message;
-        const matchingVoice = targetVoice || (language === "ta" ? undefined : englishFallbackVoice);
+        // Filter out stubs if concrete voices exist
+        const concreteVoices = langVoices.filter((voice) => {
+          const uri = (voice.voiceURI || "").toLowerCase();
+          return uri.includes("-x-") || uri.includes("-local") || uri.includes("-network");
+        });
+        const candidates = concreteVoices.length > 0 ? concreteVoices : langVoices;
+
+        // Filter by gender keyword (checking both name and voiceURI)
+        const isMale = voiceGender === "male";
+        let genderVoices = candidates.filter((voice) => {
+          const name = (voice.name || "").toLowerCase();
+          const uri = (voice.voiceURI || "").toLowerCase();
+          const text = `${name} | ${uri}`;
+          const match = uri.match(/-x-([a-z0-9]+)/);
+          const variant = match ? match[1] : "";
+
+          if (isMale) {
+            return (
+              text.includes("male") ||
+              text.includes("david") ||
+              text.includes("guy") ||
+              text.includes("man") ||
+              text.includes("ian") ||
+              text.includes("colin") ||
+              text.includes("#male") ||
+              (variant && (
+                variant.endsWith("b") ||
+                variant.endsWith("d") ||
+                variant.endsWith("g") ||
+                variant.endsWith("m") ||
+                variant.includes("guy") ||
+                variant.includes("man")
+              ))
+            );
+          } else {
+            return (
+              text.includes("female") ||
+              text.includes("zira") ||
+              text.includes("girl") ||
+              text.includes("woman") ||
+              text.includes("google") ||
+              text.includes("natural") ||
+              text.includes("hazel") ||
+              text.includes("susan") ||
+              text.includes("#female") ||
+              (variant && (
+                variant.endsWith("a") ||
+                variant.endsWith("c") ||
+                variant.endsWith("e") ||
+                variant.endsWith("f") ||
+                variant.endsWith("l") ||
+                variant.includes("girl") ||
+                variant.includes("woman")
+              ))
+            );
+          }
+        });
+
+        const voiceList = genderVoices.length > 0 ? genderVoices : candidates;
+        const matchingVoice =
+          voiceList.find((v) => v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("google") || v.voiceURI.toLowerCase().includes("natural")) ||
+          voiceList[0];
+
+        const targetLangCode = language === "ta" ? "ta-IN" : "en-US";
+        const shouldUseEnglishFallback = language !== "ta" && !matchingVoice && options.fallbackMessage;
+        const finalMessage = shouldUseEnglishFallback ? options.fallbackMessage || spokenMessage : spokenMessage;
 
         synth.cancel();
         synth.resume();
 
-        const utterance = new SpeechSynthesisUtterance(spokenMessage);
-        utterance.lang = matchingVoice?.lang || targetLang;
+        const utterance = new SpeechSynthesisUtterance(finalMessage);
+        utterance.lang = matchingVoice?.lang || targetLangCode;
         utterance.rate = language === "ta" ? 0.82 : 0.9;
         utterance.pitch = 1;
         utterance.volume = 1;
         if (matchingVoice) utterance.voice = matchingVoice;
 
-        synth.speak(utterance);
-        window.setTimeout(() => synth.resume(), 40);
-        window.setTimeout(() => synth.resume(), 160);
+        // 50ms delay between cancel and speak resolves silent audio glitches on Android
+        window.setTimeout(() => {
+          synth.speak(utterance);
+        }, 50);
+
+        window.setTimeout(() => synth.resume(), 120);
+        window.setTimeout(() => synth.resume(), 280);
       };
 
       const voices = synth.getVoices();
@@ -565,7 +817,6 @@ const Index = () => {
         return;
       }
 
-      // Chrome/Edge often populate speech voices asynchronously.
       const speakAfterVoicesLoad = () => {
         synth.removeEventListener("voiceschanged", speakAfterVoicesLoad);
         speakWithAvailableVoices(synth.getVoices());
@@ -577,7 +828,235 @@ const Index = () => {
         if (!synth.speaking) speakWithAvailableVoices(synth.getVoices());
       }, 600);
     },
-    [language, playVoiceCue, voiceGuidance]
+    [language, voiceGender]
+  );
+
+  const speak = useCallback(
+    (message: string, options: { force?: boolean; fallbackMessage?: string; cue?: boolean } = {}) => {
+      if (!voiceGuidance && !options.force) return;
+
+      if (options.cue !== false) {
+        playVoiceCue();
+      }
+
+      const targetLang = language === "ta" ? "ta-IN" : "en-US";
+      const spokenMessage = (language !== "ta" && options.fallbackMessage) ? options.fallbackMessage : message;
+
+      if (Capacitor.isNativePlatform()) {
+        RingtonePicker.maximizeMediaVolume()
+          .catch((err) => console.warn("Failed to maximize media volume:", err))
+          .finally(async () => {
+            let selectedVoiceIndex: number | undefined = undefined;
+            let finalTargetLang = targetLang;
+            let hasTamilVoice = false;
+
+            try {
+              const { voices } = await TextToSpeech.getSupportedVoices();
+              console.log("[TTS Debug] Available native voices count:", voices ? voices.length : 0);
+              if (voices && voices.length > 0) {
+                voices.forEach((v, idx) => {
+                  console.log(`[TTS Debug] Voice [${idx}]: name="${v.name}" lang="${v.lang}" voiceURI="${v.voiceURI}"`);
+                });
+
+                // Check if any Tamil voices exist
+                const tamilVoices = voices.map((v, idx) => ({ voice: v, index: idx }))
+                  .filter(({ voice }) => {
+                    const l = voice.lang.toLowerCase();
+                    const uri = (voice.voiceURI || "").toLowerCase();
+                    const name = (voice.name || "").toLowerCase();
+                    return l.startsWith("ta") || l.startsWith("tam") || uri.includes("tamil") || name.includes("tamil");
+                  });
+
+                if (tamilVoices.length > 0) {
+                  hasTamilVoice = true;
+                  console.log("[TTS Debug] Found native Tamil voices:", tamilVoices.length);
+                }
+
+                // Select matching voice based on current language
+                const isTamil = language === "ta";
+                let matchedVoices = isTamil ? tamilVoices : voices.map((v, idx) => ({ voice: v, index: idx }))
+                  .filter(({ voice }) => {
+                    const l = voice.lang.toLowerCase();
+                    return l === "en-us" || l === "en_us";
+                  });
+
+                // Fallback to general English if no exact en-US voices are found
+                if (!isTamil && matchedVoices.length === 0) {
+                  matchedVoices = voices.map((v, idx) => ({ voice: v, index: idx }))
+                    .filter(({ voice }) => {
+                      const l = voice.lang.toLowerCase();
+                      const uri = (voice.voiceURI || "").toLowerCase();
+                      const name = (voice.name || "").toLowerCase();
+                      return l.startsWith("en") || l.startsWith("eng") || uri.includes("english") || name.includes("english");
+                    });
+                }
+
+                // Fallback to English if Tamil was requested but no Tamil voices were found
+                if (isTamil && matchedVoices.length === 0) {
+                  console.log("[TTS Debug] Tamil requested but no Tamil voices found. Falling back to English list.");
+                  matchedVoices = voices.map((v, idx) => ({ voice: v, index: idx }))
+                    .filter(({ voice }) => {
+                      const l = voice.lang.toLowerCase();
+                      const uri = (voice.voiceURI || "").toLowerCase();
+                      const name = (voice.name || "").toLowerCase();
+                      return l.startsWith("en") || l.startsWith("eng") || uri.includes("english") || name.includes("english");
+                    });
+                }
+
+                // Filter out stubs if concrete voices exist
+                const concreteVoices = matchedVoices.filter(({ voice }) => {
+                  const uri = (voice.voiceURI || "").toLowerCase();
+                  return uri.includes("-x-") || uri.includes("-local") || uri.includes("-network");
+                });
+                const candidates = concreteVoices.length > 0 ? concreteVoices : matchedVoices;
+
+                if (candidates.length > 0) {
+                  // Filter by gender keyword (checking both name and voiceURI)
+                  const isMale = voiceGender === "male";
+                  console.log(`[TTS Debug] Filtering matched voices for gender: ${voiceGender}`);
+                  const genderMatched = candidates.filter(({ voice }) => {
+                    const name = (voice.name || "").toLowerCase();
+                    const uri = (voice.voiceURI || "").toLowerCase();
+                    const text = `${name} | ${uri}`;
+                    const match = uri.match(/-x-([a-z0-9]+)/);
+                    const variant = match ? match[1] : "";
+
+                    if (isMale) {
+                      return (
+                        text.includes("male") ||
+                        text.includes("david") ||
+                        text.includes("guy") ||
+                        text.includes("man") ||
+                        text.includes("ian") ||
+                        text.includes("colin") ||
+                        text.includes("#male") ||
+                        (variant && (
+                          variant.endsWith("b") ||
+                          variant.endsWith("d") ||
+                          variant.endsWith("g") ||
+                          variant.endsWith("m") ||
+                          variant.includes("guy") ||
+                          variant.includes("man")
+                        ))
+                      );
+                    } else {
+                      return (
+                        text.includes("female") ||
+                        text.includes("zira") ||
+                        text.includes("girl") ||
+                        text.includes("woman") ||
+                        text.includes("google") ||
+                        text.includes("natural") ||
+                        text.includes("hazel") ||
+                        text.includes("susan") ||
+                        text.includes("#female") ||
+                        (variant && (
+                          variant.endsWith("a") ||
+                          variant.endsWith("c") ||
+                          variant.endsWith("e") ||
+                          variant.endsWith("f") ||
+                          variant.endsWith("l") ||
+                          variant.includes("girl") ||
+                          variant.includes("woman")
+                        ))
+                      );
+                    }
+                  });
+
+                  const bestMatch = genderMatched.length > 0 ? genderMatched[0] : candidates[0];
+                  selectedVoiceIndex = bestMatch.index;
+                  finalTargetLang = bestMatch.voice.lang;
+                  console.log(`[TTS Debug] Selected Voice Index: ${selectedVoiceIndex}, Name: "${bestMatch.voice.name}", Lang: "${bestMatch.voice.lang}", URI: "${bestMatch.voice.voiceURI}"`);
+                } else {
+                  console.log("[TTS Debug] No matching language voices found in voice list.");
+                }
+              } else {
+                console.log("[TTS Debug] getSupportedVoices() returned empty or null array.");
+              }
+            } catch (err) {
+              console.warn("[TTS Debug] Failed to query supported voices:", err);
+            }
+
+            if (language === "ta" && !hasTamilVoice) {
+              try {
+                const result = await TextToSpeech.getSupportedLanguages();
+                console.log("[TTS Debug] Native Supported Languages list:", result.languages);
+                const isTamilSupported = result.languages.some((lang) =>
+                  lang.toLowerCase().startsWith("ta") || lang.toLowerCase().startsWith("tam")
+                );
+
+                if (!isTamilSupported) {
+                  toast.error(
+                    "தமிழ் குரல் நிறுவப்படவில்லை. அதை அமைக்க அமைப்புகள் திறக்கப்படும்.",
+                    {
+                      duration: 6000,
+                      action: {
+                        label: "அமைப்புகள்",
+                        onClick: () => {
+                          RingtonePicker.openTtsSettings();
+                        }
+                      }
+                    }
+                  );
+                  
+                  const englishMessage = options.fallbackMessage || "Tamil language voice data is not installed on your system. Please open Text-to-Speech settings to download it.";
+                  TextToSpeech.speak({
+                    text: englishMessage,
+                    lang: "en-US",
+                    rate: 0.9,
+                    pitch: 1.0,
+                    volume: 1.0,
+                    category: "ambient",
+                  }).catch((e) => console.error("Fallback English speech failed:", e));
+                  return;
+                }
+              } catch (err) {
+                console.warn("[TTS Debug] Failed to check supported languages:", err);
+              }
+            }
+
+            const speakOptions: any = {
+              text: spokenMessage,
+              lang: finalTargetLang,
+              rate: language === "ta" ? 0.82 : 0.9, // Aligning Tamil rate (0.82) with speakWeb
+              pitch: 1.0,
+              volume: 1.0,
+              category: "ambient",
+            };
+            if (selectedVoiceIndex !== undefined) {
+              speakOptions.voice = selectedVoiceIndex;
+            }
+
+            console.log(`[TTS Debug] TextToSpeech.speak options: text="${speakOptions.text}" lang="${speakOptions.lang}" voice=${speakOptions.voice}`);
+            TextToSpeech.speak(speakOptions).catch((err) => {
+              console.error("[TTS Debug] Native TextToSpeech failed:", err);
+              if (language === "ta") {
+                // Play via online translation TTS stream
+                speakOnlineFallback(spokenMessage, targetLang);
+                
+                // Show a warning toast advising the user to download Tamil voice data
+                toast.error(
+                  "தமிழ் குரல் தரவு நிறுவப்படவில்லை. அதை அமைக்க அமைப்புகள் திறக்கப்படும்.",
+                  {
+                    duration: 8000,
+                    action: {
+                      label: "அமைப்புகள்",
+                      onClick: () => {
+                        RingtonePicker.openTtsSettings();
+                      }
+                    }
+                  }
+                );
+              } else {
+                speakWeb(spokenMessage, targetLang, options);
+              }
+            });
+          });
+      } else {
+        speakWeb(spokenMessage, targetLang, options);
+      }
+    },
+    [language, playVoiceCue, voiceGuidance, speakWeb, voiceGender, speakOnlineFallback]
   );
 
   const getVoiceTestMessage = useCallback(
@@ -603,6 +1082,24 @@ const Index = () => {
   const handleTestVoice = () => {
     speak(getVoiceTestMessage(), { force: true, fallbackMessage: getVoiceTestFallbackMessage() });
   };
+
+  const isFirstVoiceGenderRender = useRef(true);
+  useEffect(() => {
+    if (isFirstVoiceGenderRender.current) {
+      isFirstVoiceGenderRender.current = false;
+      return;
+    }
+
+    const previewMessage = language === "ta"
+      ? (voiceGender === "female"
+          ? "குரல் பாத்திரம் அமைதி பெண் என மாற்றப்பட்டது."
+          : "குரல் பாத்திரம் அமைதி ஆண் என மாற்றப்பட்டது.")
+      : (voiceGender === "female"
+          ? "Vocal persona set to Serene female."
+          : "Vocal persona set to Calm male.");
+
+    speak(previewMessage, { force: true });
+  }, [voiceGender, language, speak]);
 
   const describeTalkBackTarget = useCallback(
     (target: EventTarget | null) => {
@@ -721,6 +1218,28 @@ const Index = () => {
     };
   }, [describeTalkBackTarget, speak, voiceGuidance]);
 
+  // Software TalkBack: Announce screen navigation on transitions
+  useEffect(() => {
+    if (!voiceGuidance) return;
+
+    let message = "";
+    if (!userProfile) {
+      message = language === "ta" ? "உள்நுழைவு திரை" : "Login screen";
+    } else {
+      const screenNames: Record<Screen, string> = {
+        home: language === "ta" ? "முகப்பு திரை" : "Home screen",
+        notifications: language === "ta" ? "அறிவிப்புகள் திரை" : "Notifications screen",
+        settings: language === "ta" ? "அமைப்புகள் திரை" : "Settings screen",
+        profile: language === "ta" ? "சுயவிவர திரை" : "Profile screen",
+      };
+      message = screenNames[screen] || "";
+    }
+
+    if (message) {
+      speak(message, { cue: false });
+    }
+  }, [screen, userProfile, language, speak, voiceGuidance]);
+
   const activeReminderName = medicineReminder?.medicineName || upcomingSmartReminder?.medicineName;
   const activeReminderTime = medicineReminder?.time || upcomingSmartReminder?.time;
 
@@ -739,391 +1258,7 @@ const Index = () => {
   const isSerialPortOpen = (candidatePort: BrowserSerialPort | null) =>
     Boolean(candidatePort?.readable || candidatePort?.writable);
 
-  const connectBluetoothGattDevice = async (btDevice: BrowserBluetoothDevice) => {
-    if (!btDevice?.gatt) {
-      throw new Error("This device does not expose a Bluetooth GATT connection.");
-    }
 
-    const server = await btDevice.gatt.connect();
-    if (!btDevice.gatt.connected && !server?.connected) {
-      throw new Error("Bluetooth connection did not become active.");
-    }
-
-    return server;
-  };
-
-  const writeSerialLine = async (line: string) => {
-    if (!port?.writable || connectionTransport !== "serial") {
-      return false;
-    }
-
-    if (serialWriterBusyRef.current) {
-      return true;
-    }
-
-    serialWriterBusyRef.current = true;
-    let writer: any;
-    try {
-      writer = port.writable.getWriter();
-      await writer.write(new TextEncoder().encode(`${line}\n`));
-      return true;
-    } catch (error) {
-      console.error(`Serial write failed for ${line}:`, error);
-      return false;
-    } finally {
-      writer?.releaseLock?.();
-      serialWriterBusyRef.current = false;
-    }
-  };
-
-  const sendPillBoxCommand = async (command: "ALARM:START" | "ALARM:STOP") => {
-    const sent = await writeSerialLine(command);
-    if (!sent) {
-      handleStrictConnectionLoss(`Could not send ${command} to pill box.`);
-    }
-  };
-
-  const pingSerialConnection = () => writeSerialLine("PING");
-
-  const applyConnectedState = ({
-    nextDevice,
-    nextPort,
-    nextName,
-    nextTransport,
-    ready = true,
-  }: {
-    nextDevice: BrowserBluetoothDevice | null;
-    nextPort: BrowserSerialPort | null;
-    nextName: string;
-    nextTransport: Exclude<ConnectionTransport, null>;
-    ready?: boolean;
-  }) => {
-    setDevice(nextDevice);
-    setPort(nextPort);
-    setKnownDeviceName(nextName);
-    setSystemDeviceReady(ready);
-    setPillBoxConnected(true);
-    setConnectionTransport(nextTransport);
-    strictDisconnectAnnouncedRef.current = false;
-    blockedSerialPortRef.current = null;
-  };
-
-  const clearLiveConnectionState = () => {
-    setPillBoxConnected(false);
-    setConnectionTransport(null);
-  };
-
-  const closeSerialPort = async (targetPort: BrowserSerialPort | null) => {
-    if (!targetPort) return;
-
-    try {
-      await serialReaderRef.current?.cancel?.();
-    } catch (error) {
-      console.warn("Could not cancel serial reader before closing:", error);
-    }
-
-    if (isSerialPortOpen(targetPort)) {
-      await targetPort.close();
-    }
-  };
-
-  const refreshKnownDevices = async () => {
-    if (pillBoxBusy) return;
-
-    let ready = false;
-    let nextKnownName: string | undefined;
-    let nextSavedBluetoothDevices: any[] = [];
-    let nextSavedSerialPorts: any[] = [];
-    let nextConnected = false;
-    let nextTransport: ConnectionTransport = null;
-    let nextDevice = device;
-    let nextPort = port;
-
-    const serialConnectionOpen = isSerialPortOpen(port) && port !== blockedSerialPortRef.current;
-    if (serialConnectionOpen) {
-      nextConnected = true;
-      nextTransport = "serial";
-      ready = true;
-      nextKnownName = knownDeviceName || "Paired serial device";
-    }
-
-    if (device?.gatt?.connected) {
-      nextConnected = true;
-      nextTransport = "bluetooth";
-      ready = true;
-      nextKnownName = device.name || knownDeviceName || "Bluetooth device";
-    }
-
-    try {
-      if (supportsSerial && navAny.serial?.getPorts) {
-        const ports = await navAny.serial.getPorts();
-        nextSavedSerialPorts = ports;
-
-        if (ports.length > 0) {
-          ready = true;
-          if (!nextKnownName) {
-            nextKnownName = "Paired device";
-          }
-        }
-      }
-
-      if (supportsBluetooth && navAny.bluetooth?.getDevices) {
-        const devices = await navAny.bluetooth.getDevices();
-        if (devices.length > 0) {
-          nextSavedBluetoothDevices = devices;
-          ready = true;
-
-          const connectedRememberedDevice = devices.find((candidate: any) => candidate.gatt?.connected);
-          if (connectedRememberedDevice) {
-            nextDevice = connectedRememberedDevice;
-            nextConnected = true;
-            nextTransport = "bluetooth";
-            nextKnownName = connectedRememberedDevice.name || "Bluetooth device";
-          } else if (!nextKnownName) {
-            nextKnownName = devices[0].name || "Saved Bluetooth access";
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Could not refresh native device access:", error);
-    }
-
-    if (!nextConnected) {
-      if (device && !device.gatt?.connected) {
-        nextDevice = null;
-      }
-      if (port && !serialConnectionOpen) {
-        nextPort = null;
-      }
-    }
-
-    setSystemDeviceReady(ready);
-    setKnownDeviceName(nextKnownName);
-    setSavedBluetoothDevices(nextSavedBluetoothDevices);
-    setSavedSerialPorts(nextSavedSerialPorts);
-    setPillBoxConnected(nextConnected);
-    setConnectionTransport(nextTransport);
-
-    if (nextDevice !== device) {
-      setDevice(nextDevice);
-    }
-
-    if (nextPort !== port) {
-      setPort(nextPort);
-    }
-  };
-
-  const isLiveConnectionActive = () => {
-    if (connectionTransport === "bluetooth") {
-      return Boolean(device?.gatt?.connected);
-    }
-
-    if (connectionTransport === "serial") {
-      return isSerialPortOpen(port);
-    }
-
-    return false;
-  };
-
-  const handleStrictConnectionLoss = (description = copy.bluetoothClosed) => {
-    if (strictDisconnectAnnouncedRef.current) return;
-
-    strictDisconnectAnnouncedRef.current = true;
-    const lostPort = connectionTransport === "serial" ? port : null;
-    if (lostPort) {
-      blockedSerialPortRef.current = lostPort;
-    }
-
-    clearLiveConnectionState();
-    setDevice((currentDevice: BrowserBluetoothDevice | null) =>
-      currentDevice?.gatt?.connected ? currentDevice : null
-    );
-    setPort(null);
-    setSystemDeviceReady(false);
-    toast(copy.pillBoxDisconnected, { description });
-    recordNotification({
-      type: "missed",
-      title: "Pill box connection lost",
-      message: description,
-    });
-    speak(copy.pillBoxDisconnected, { fallbackMessage: "Pill box disconnected." });
-    if (lostPort) {
-      void closeSerialPort(lostPort).finally(() => {
-        blockedSerialPortRef.current = null;
-        void refreshKnownDevices();
-      });
-    } else {
-      void refreshKnownDevices();
-    }
-  };
-
-  const refreshNativeBluetoothStatus = async () => {
-    try {
-      let snapshot: NativeBluetoothSnapshot | null = null;
-
-      for (const url of NATIVE_BLUETOOTH_STATUS_URLS) {
-        try {
-          const response = await fetch(url, {
-            cache: "no-store",
-            headers: { Accept: "application/json" },
-          });
-
-          if (response.ok) {
-            snapshot = (await response.json()) as NativeBluetoothSnapshot;
-            snapshot.sourceUrl = url;
-            break;
-          }
-        } catch {
-          // Try the next bridge URL. The direct native bridge is optional in web-only mode.
-        }
-      }
-
-      if (!snapshot?.supported) {
-        setNativeBluetoothSnapshot(
-          snapshot ?? {
-            supported: false,
-            devices: [],
-            error: "Native Bluetooth bridge is not running.",
-          }
-        );
-        setNativeConnectedDevice(null);
-        return;
-      }
-
-      setNativeBluetoothSnapshot(snapshot);
-
-      const hintNames = new Set(
-        [device?.name, knownDeviceName, ...savedBluetoothDevices.map((savedDevice: any) => savedDevice?.name)]
-          .map((value) => normalizeDeviceKey(value))
-          .filter(Boolean)
-      );
-
-      const matchedWindowsDevice =
-        snapshot.devices?.find((candidate) => {
-          const candidateKey = normalizeDeviceKey(candidate.name);
-          return Boolean(candidateKey && hintNames.has(candidateKey));
-        }) ??
-        snapshot.devices?.find((candidate) => candidate.connected) ??
-        null;
-
-      setNativeConnectedDevice(matchedWindowsDevice);
-
-      if (!pillBoxConnected && matchedWindowsDevice?.name) {
-        setSystemDeviceReady(true);
-        setKnownDeviceName((current) => current || matchedWindowsDevice.name);
-      }
-    } catch (error) {
-      console.error("Could not refresh native Windows Bluetooth status:", error);
-      setNativeBluetoothSnapshot({
-        supported: false,
-        devices: [],
-        error: error instanceof Error ? error.message : "Could not refresh native Windows Bluetooth status.",
-      });
-      setNativeConnectedDevice(null);
-    }
-  };
-
-  useEffect(() => {
-    void refreshKnownDevices();
-  }, []);
-
-  useEffect(() => {
-    void refreshNativeBluetoothStatus();
-
-    const intervalId = window.setInterval(() => {
-      void refreshNativeBluetoothStatus();
-    }, DEVICE_REFRESH_INTERVAL_MS);
-
-    const refreshOnFocus = () => {
-      void refreshNativeBluetoothStatus();
-    };
-
-    window.addEventListener("focus", refreshOnFocus);
-    window.addEventListener("pageshow", refreshOnFocus);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOnFocus);
-      window.removeEventListener("pageshow", refreshOnFocus);
-    };
-  }, [device, knownDeviceName, pillBoxConnected, savedBluetoothDevices]);
-
-  useEffect(() => {
-    const refreshOnDemand = () => {
-      void refreshKnownDevices();
-    };
-
-    const handleBluetoothAvailabilityChange = async () => {
-      try {
-        const available = navAny.bluetooth?.getAvailability ? await navAny.bluetooth.getAvailability() : true;
-        if (!available && connectionTransport === "bluetooth" && pillBoxConnected) {
-          handleStrictConnectionLoss("Bluetooth adapter is unavailable.");
-          return;
-        }
-      } catch (error) {
-        console.error("Could not read Bluetooth availability:", error);
-      }
-
-      void refreshKnownDevices();
-    };
-
-    const handleSerialDisconnect = (event: Event) => {
-      if (connectionTransport === "serial" && pillBoxConnected && (!port || event.target === port)) {
-        handleStrictConnectionLoss("Serial Bluetooth device disconnected.");
-        return;
-      }
-
-      void refreshKnownDevices();
-    };
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void refreshKnownDevices();
-      }
-    };
-
-    const intervalId = window.setInterval(refreshOnDemand, DEVICE_REFRESH_INTERVAL_MS);
-
-    window.addEventListener("focus", refreshOnDemand);
-    window.addEventListener("pageshow", refreshOnDemand);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    navAny.bluetooth?.addEventListener?.("availabilitychanged", handleBluetoothAvailabilityChange);
-    navAny.serial?.addEventListener?.("connect", refreshOnDemand);
-    navAny.serial?.addEventListener?.("disconnect", handleSerialDisconnect);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOnDemand);
-      window.removeEventListener("pageshow", refreshOnDemand);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      navAny.bluetooth?.removeEventListener?.("availabilitychanged", handleBluetoothAvailabilityChange);
-      navAny.serial?.removeEventListener?.("connect", refreshOnDemand);
-      navAny.serial?.removeEventListener?.("disconnect", handleSerialDisconnect);
-    };
-  }, [connectionTransport, pillBoxBusy, device, port, knownDeviceName, pillBoxConnected]);
-
-  useEffect(() => {
-    if (!pillBoxConnected || pillBoxBusy) return;
-
-    const verifyLiveConnection = async () => {
-      if (!isLiveConnectionActive()) {
-        handleStrictConnectionLoss("Live connection check failed.");
-        return;
-      }
-
-      if (connectionTransport === "serial") {
-        const heartbeatOk = await pingSerialConnection();
-        if (!heartbeatOk) {
-          handleStrictConnectionLoss("Serial Bluetooth heartbeat failed.");
-        }
-      }
-    };
-
-    void verifyLiveConnection();
-    const intervalId = window.setInterval(verifyLiveConnection, LIVE_CONNECTION_CHECK_INTERVAL_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, [connectionTransport, device, pillBoxBusy, pillBoxConnected, port]);
 
   const markCurrentReminderTaken = useCallback(
     (source: "app" | "hardware" = "app") => {
@@ -1149,363 +1284,9 @@ const Index = () => {
     [copy, medicineReminder, speak, upcomingSmartReminder]
   );
 
-  const handleHardwareLine = useCallback(
-    (line: string) => {
-      if (!line) return;
 
-      const hardwareEvent = parseHardwareDoseEvent(line);
-      if (hardwareEvent) {
-        const schedule =
-          hardwareEvent.doseIndex !== null ? medicineSchedules[hardwareEvent.doseIndex] : undefined;
-        const doseName = schedule?.name || hardwareEvent.label;
 
-        if (hardwareEvent.action === "ALERT") {
-          setMedicineReminder(
-            schedule
-              ? scheduleToReminder(schedule)
-              : {
-                  medicineName: hardwareEvent.label,
-                  dosage: "Hardware dose reminder",
-                  time: formatHardwareReminderTime(hardwareEvent.time),
-                }
-          );
-          setReminderOpen(true);
-          recordNotification({
-            type: "reminder",
-            title: "Hardware medicine alert",
-            message: `${doseName} is due now.`,
-          });
-          toast.info("Hardware medicine alert", {
-            description: `${doseName} is due now.`,
-          });
-          return;
-        }
 
-        if (hardwareEvent.action === "CONFIRMED") {
-          if (schedule) {
-            handleTrackDose(schedule.id, "taken");
-          }
-          setReminderOpen(false);
-          setMedicineReminder(null);
-          activeMedicineReminderKeyRef.current = null;
-          recordNotification({
-            type: "success",
-            title: "Dose confirmed from pill box",
-            message: `${doseName} was confirmed via ${hardwareEvent.detail || "hardware"}.`,
-          });
-          toast.success("Dose confirmed from pill box", {
-            description: `${doseName} was confirmed via ${hardwareEvent.detail || "hardware"}.`,
-          });
-          speak("Medicine confirmed from the pill box.", {
-            fallbackMessage: "Medicine confirmed from the pill box.",
-          });
-          return;
-        }
-
-        if (hardwareEvent.action === "MISSED") {
-          if (schedule) {
-            handleTrackDose(schedule.id, "missed");
-          }
-          setReminderOpen(false);
-          setMedicineReminder(null);
-          activeMedicineReminderKeyRef.current = null;
-          recordNotification({
-            type: "missed",
-            title: "Dose missed",
-            message: `${doseName} was not confirmed before the hardware timeout.`,
-          });
-          toast.error("Dose missed", {
-            description: `${doseName} was not confirmed before the hardware timeout.`,
-          });
-          speak("Dose missed. Caregiver alert needed.", {
-            fallbackMessage: "Dose missed. Caregiver alert needed.",
-          });
-          return;
-        }
-
-        if (hardwareEvent.action === "SNOOZED") {
-          setReminderOpen(false);
-          recordNotification({
-            type: "reminder",
-            title: "Hardware snooze pressed",
-            message: `${doseName} was snoozed from the pill box.`,
-          });
-          toast("Hardware snooze pressed", {
-            description: `${doseName} was snoozed from the pill box.`,
-          });
-          return;
-        }
-
-        if (hardwareEvent.action === "BUTTON") {
-          toast.info(`Hardware ${hardwareEvent.label}`, {
-            description: hardwareEvent.detail || "Button signal received from pill box.",
-          });
-          return;
-        }
-      }
-
-      if (line === "BTN:PRESSED") {
-        void sendPillBoxCommand("ALARM:STOP");
-        markCurrentReminderTaken("hardware");
-        return;
-      }
-
-      if (line.startsWith("TIME:")) {
-        return;
-      }
-    },
-    [markCurrentReminderTaken, medicineSchedules, sendPillBoxCommand, speak]
-  );
-
-  useEffect(() => {
-    if (!port?.readable || connectionTransport !== "serial" || !pillBoxConnected) return;
-
-    let cancelled = false;
-    let buffer = "";
-    const decoder = new TextDecoder();
-
-    const readSerialLines = async () => {
-      const reader = port.readable.getReader();
-      serialReaderRef.current = reader;
-
-      try {
-        while (!cancelled) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          while (buffer.includes("\n")) {
-            const [line, rest] = buffer.split("\n", 2);
-            buffer = rest;
-            handleHardwareLine(line.trim());
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Serial read failed:", error);
-          handleStrictConnectionLoss("Serial connection stopped responding.");
-        }
-      } finally {
-        reader.releaseLock();
-        if (serialReaderRef.current === reader) {
-          serialReaderRef.current = null;
-        }
-        if (!cancelled && connectionTransport === "serial") {
-          handleStrictConnectionLoss("Serial connection closed.");
-        }
-      }
-    };
-
-    void readSerialLines();
-
-    return () => {
-      cancelled = true;
-      void serialReaderRef.current?.cancel?.();
-    };
-  }, [connectionTransport, handleHardwareLine, pillBoxConnected, port]);
-
-  useEffect(() => {
-    if (reminderOpen) {
-      void sendPillBoxCommand("ALARM:START");
-    }
-  }, [reminderOpen, sendPillBoxCommand]);
-
-  useEffect(() => {
-    if (!device) return;
-
-    const handleGattDisconnect = () => {
-      handleStrictConnectionLoss(copy.bluetoothClosed);
-    };
-
-    device.addEventListener?.("gattserverdisconnected", handleGattDisconnect);
-
-    return () => {
-      device.removeEventListener?.("gattserverdisconnected", handleGattDisconnect);
-    };
-  }, [copy.bluetoothClosed, device]);
-
-  const connectWithSerial = async () => {
-    toast.loading(copy.openingWindowsPicker, { id: "pillbox" });
-    const serialPort = await navAny.serial.requestPort();
-    await serialPort.open({ baudRate: 9600 });
-    applyConnectedState({
-      nextDevice: null,
-      nextPort: serialPort,
-      nextName: "Paired serial device",
-      nextTransport: "serial",
-    });
-    toast.success(copy.pillBoxConnected, {
-      id: "pillbox",
-      description: copy.nativeSerialConnected,
-    });
-    recordNotification({
-      type: "success",
-      title: "Pill box connected",
-      message: "Connected through the native serial picker.",
-    });
-    speak(copy.pillBoxConnected, { fallbackMessage: "Pill box connected." });
-  };
-
-  const connectWithBluetooth = async () => {
-    toast.loading(copy.openingWindowsPicker, { id: "pillbox" });
-    const btDevice = await navAny.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: ["generic_access", "device_information", "battery_service"],
-    });
-
-    toast.loading(copy.connectingTo(btDevice.name || "Pill Box"), { id: "pillbox" });
-    await connectBluetoothGattDevice(btDevice);
-
-    applyConnectedState({
-      nextDevice: btDevice,
-      nextPort: null,
-      nextName: btDevice.name || "Bluetooth device",
-      nextTransport: "bluetooth",
-    });
-    toast.success(copy.pillBoxConnected, {
-      id: "pillbox",
-      description: copy.pairedWith(btDevice.name || "device"),
-    });
-    recordNotification({
-      type: "success",
-      title: "Pill box connected",
-      message: `Connected to ${btDevice.name || "Bluetooth device"}.`,
-    });
-    speak(copy.pillBoxConnected, { fallbackMessage: "Pill box connected." });
-  };
-
-  const handlePillBoxToggle = async () => {
-    if (pillBoxBusy) return;
-    setPillBoxBusy(true);
-
-    if (pillBoxConnected) {
-      try {
-        if (device?.gatt?.connected) device.gatt.disconnect();
-        await closeSerialPort(port);
-      } catch (err) {
-        console.error("Disconnect error:", err);
-      }
-      clearLiveConnectionState();
-      setPillBoxBusy(false);
-      await refreshKnownDevices();
-      toast(copy.pillBoxDisconnected, { description: copy.bluetoothClosed });
-      recordNotification({
-        type: "missed",
-        title: "Pill box disconnected",
-        message: "Bluetooth connection was closed.",
-      });
-      speak(copy.pillBoxDisconnected, { fallbackMessage: "Pill box disconnected." });
-    } else {
-      try {
-        if (shouldPreferSerialConnection) {
-          await connectWithSerial();
-        } else if (supportsBluetooth) {
-          await connectWithBluetooth();
-        } else if (supportsSerial) {
-          await connectWithSerial();
-        } else {
-          throw new Error("Bluetooth/Serial API not supported in this browser.");
-        }
-      } catch (error: any) {
-        if (error.name !== "NotFoundError") {
-          toast.error(copy.connectionFailed, { description: error.message || copy.connectionFailed });
-        }
-      } finally {
-        setPillBoxBusy(false);
-      }
-    }
-  };
-
-  const handleConnectSavedWindowsDevice = async () => {
-    if (pillBoxBusy || pillBoxConnected || !supportsSerial) return;
-
-    setPillBoxBusy(true);
-    try {
-      const savedSerialPort = savedSerialPorts[0];
-
-      if (savedSerialPort) {
-        toast.loading(copy.reconnectingSavedWindows, { id: "pillbox" });
-        if (!isSerialPortOpen(savedSerialPort)) {
-          await savedSerialPort.open({ baudRate: 9600 });
-        }
-        applyConnectedState({
-          nextDevice: null,
-          nextPort: savedSerialPort,
-          nextName: "Paired device",
-          nextTransport: "serial",
-        });
-        toast.success(copy.pillBoxConnected, {
-          id: "pillbox",
-          description: copy.reconnectedSavedWindows,
-        });
-        recordNotification({
-          type: "success",
-          title: "Pill box reconnected",
-          message: "Reconnected using saved device access.",
-        });
-        speak(copy.pillBoxConnected, { fallbackMessage: "Pill box connected." });
-      } else {
-        await connectWithSerial();
-      }
-    } catch (error: any) {
-      if (error.name !== "NotFoundError") {
-        toast.error(copy.connectionFailed, {
-          description: error.message || copy.windowsPickerFailed,
-        });
-      }
-    } finally {
-      setPillBoxBusy(false);
-    }
-  };
-
-  const handleReconnectSavedBluetooth = async (targetDevice: any) => {
-    if (pillBoxBusy || pillBoxConnected || !targetDevice) return;
-
-    setPillBoxBusy(true);
-    try {
-      toast.loading(copy.reconnectingSavedBluetooth(targetDevice.name || "saved device"), {
-        id: "pillbox",
-      });
-
-      await connectBluetoothGattDevice(targetDevice);
-
-      applyConnectedState({
-        nextDevice: targetDevice,
-        nextPort: null,
-        nextName: targetDevice.name || "Saved Bluetooth device",
-        nextTransport: "bluetooth",
-      });
-      toast.success(copy.pillBoxConnected, {
-        id: "pillbox",
-        description: copy.reconnectedTo(targetDevice.name || "saved device"),
-      });
-      recordNotification({
-        type: "success",
-        title: "Pill box reconnected",
-        message: `Reconnected to ${targetDevice.name || "saved Bluetooth device"}.`,
-      });
-      speak(copy.pillBoxConnected, { fallbackMessage: "Pill box connected." });
-    } catch (error: any) {
-      if (error.name !== "NotFoundError") {
-        toast.error(copy.reconnectSavedBluetoothFailed, {
-          description: error.message || copy.bluetoothReconnectFailed,
-        });
-      }
-    } finally {
-      setPillBoxBusy(false);
-    }
-  };
-
-  const handleOpenSystemBluetooth = () => {
-    if (isWindows) {
-      window.location.href = "ms-settings:bluetooth";
-      return;
-    }
-
-    toast.info(copy.openBluetoothSettings, {
-      description: copy.pairThenReturn,
-    });
-  };
 
   const handleLogout = () => {
     clearActiveUserProfile();
@@ -1529,22 +1310,7 @@ const Index = () => {
     setNotificationEvents((current) => [nextNotification, ...current].slice(0, 80));
   };
 
-  const handleDemoModeToggle = () => {
-    setDemoMode((current) => {
-      const next = !current;
-      if (next) {
-        saveAppNotifications(demoNotifications);
-        setNotificationEvents(demoNotifications);
-        toast.success("Demo mode enabled", {
-          description: "Client-safe sample data is active.",
-        });
-      } else {
-        setNotificationEvents(loadAppNotifications());
-        toast("Demo mode disabled");
-      }
-      return next;
-    });
-  };
+
 
   const handleMarkUpcomingSmartReminderTaken = () => {
     if (!upcomingSmartReminder) return;
@@ -1603,7 +1369,7 @@ const Index = () => {
   };
 
   const handleSwipeEnd = () => {
-    if (profileOpen || reminderOpen) {
+    if (reminderOpen) {
       swipeStartRef.current = null;
       swipeLastRef.current = null;
       return;
@@ -1633,37 +1399,6 @@ const Index = () => {
     }
   };
 
-  const canReconnectSavedBluetooth = savedBluetoothDevices.length > 0;
-  const nativeWindowsConnectionIsLive = Boolean(nativeConnectedDevice?.connected) && !pillBoxConnected;
-  const effectivePillBoxConnected = demoMode || pillBoxConnected;
-  const effectivePillBoxBusy = demoMode ? false : pillBoxBusy;
-  const effectiveSchedules = demoMode ? demoMedicineSchedules : medicineSchedules;
-  const effectiveDoseTrackingRecords = demoMode ? createDemoDoseTrackingRecords() : doseTrackingRecords;
-  const effectiveSmartSchedules = demoMode ? createDemoSmartMedicineSchedules() : smartSchedules;
-  const effectiveUpcomingSmartReminder = demoMode
-    ? getUpcomingSmartReminder(effectiveSmartSchedules, new Date())
-    : upcomingSmartReminder;
-  const effectiveNotifications = demoMode ? demoNotifications : notificationEvents;
-  const effectiveNativeBluetoothSnapshot: NativeBluetoothSnapshot | null = demoMode
-    ? {
-        supported: true,
-        updatedAt: "Demo mode",
-        sourceUrl: "demo",
-        devices: [
-          {
-            name: "Demo Smart Pill Box",
-            connected: true,
-            source: "bluetooth-le",
-          },
-        ],
-      }
-    : nativeBluetoothSnapshot;
-  const resolvedDeviceName = demoMode
-    ? "Demo Smart Pill Box"
-    : device?.name || knownDeviceName || nativeConnectedDevice?.name;
-  const effectiveConnectionTransport = demoMode ? "bluetooth" : connectionTransport;
-  const effectiveNativeWindowsConnected = demoMode || nativeWindowsConnectionIsLive;
-
   if (!userProfile) {
     return (
       <PhoneFrame>
@@ -1672,32 +1407,6 @@ const Index = () => {
           onLogin={handleLogin}
           onToggleLanguage={() => setLanguage((current) => (current === "en" ? "ta" : "en"))}
         />
-      </PhoneFrame>
-    );
-  }
-
-  if (profileOpen) {
-    return (
-      <PhoneFrame>
-        <Suspense fallback={<ScreenLoading />}>
-          <ProfileScreen
-            language={language}
-            userProfile={userProfile}
-            onProfileChange={handleProfileChange}
-            onBack={() => setProfileOpen(false)}
-            onLogout={handleLogout}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-            remindersEnabled={remindersEnabled}
-            onRemindersEnabledChange={setRemindersEnabled}
-            soundAlerts={soundAlerts}
-            onSoundAlertsChange={setSoundAlerts}
-            voiceGuidance={voiceGuidance}
-            onVoiceGuidanceChange={handleVoiceGuidanceChange}
-            onTestVoice={handleTestVoice}
-            demoMode={demoMode}
-          />
-        </Suspense>
       </PhoneFrame>
     );
   }
@@ -1716,93 +1425,58 @@ const Index = () => {
               username={userProfile.fullName}
               language={language}
               theme={theme}
-              medicineSchedules={effectiveSchedules}
-              doseTrackingRecords={effectiveDoseTrackingRecords}
-              smartReminder={effectiveUpcomingSmartReminder}
+              medicineSchedules={medicineSchedules}
+              doseTrackingRecords={doseTrackingRecords}
+              smartReminder={upcomingSmartReminder}
               onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
               onToggleLanguage={() => setLanguage((current) => (current === "en" ? "ta" : "en"))}
               onLogout={handleLogout}
               onTriggerReminder={() => setReminderOpen(true)}
-              onOpenProfile={() => setProfileOpen(true)}
-              pillBoxConnected={effectivePillBoxConnected}
-              pillBoxBusy={effectivePillBoxBusy}
-              demoMode={demoMode}
-              onTogglePillBox={
-                demoMode
-                  ? () =>
-                      toast.info("Demo connection is simulated", {
-                        description: "Turn off Demo mode to use real Bluetooth.",
-                      })
-                  : handlePillBoxToggle
-              }
-              onToggleDemoMode={handleDemoModeToggle}
               onMarkSmartReminderTaken={handleMarkUpcomingSmartReminderTaken}
-              onTrackDose={
-                demoMode
-                  ? () =>
-                      toast.info("Demo dashboard is pre-filled", {
-                        description: "Turn off Demo mode to record real dose history.",
-                      })
-                  : handleTrackDose
-              }
+              onTrackDose={handleTrackDose}
             />
           )}
           {screen === "notifications" && (
             <NotificationsScreen
               language={language}
-              demoMode={demoMode}
-              notifications={effectiveNotifications}
-            />
-          )}
-          {screen === "bluetooth" && (
-            <BluetoothScreen
-              language={language}
-              pillBoxConnected={effectivePillBoxConnected}
-              pillBoxBusy={effectivePillBoxBusy}
-              deviceName={resolvedDeviceName}
-              connectionTransport={effectiveConnectionTransport}
-              systemDeviceReady={demoMode || systemDeviceReady}
-              nativeWindowsKnown={demoMode || Boolean(nativeConnectedDevice)}
-              nativeWindowsConnected={effectiveNativeWindowsConnected}
-              nativeBluetoothSnapshot={effectiveNativeBluetoothSnapshot}
-              medicineSchedules={effectiveSchedules}
-              savedBluetoothDevices={savedBluetoothDevices}
-              savedWindowsDeviceCount={savedSerialPorts.length}
-              canUseWindowsSerial={!demoMode && isWindows && supportsSerial}
-              canScanBluetooth={!demoMode && supportsBluetooth && !shouldPreferSerialConnection}
-              demoMode={demoMode}
-              onTogglePillBox={
-                demoMode
-                  ? () =>
-                      toast.info("Demo connection is simulated", {
-                        description: "Turn off Demo mode to use real Bluetooth.",
-                      })
-                  : handlePillBoxToggle
-              }
-              canReconnectSavedBluetooth={canReconnectSavedBluetooth}
-              onReconnectSavedBluetooth={handleReconnectSavedBluetooth}
-              onConnectSavedWindowsDevice={handleConnectSavedWindowsDevice}
-              onOpenSystemBluetooth={handleOpenSystemBluetooth}
+              notifications={notificationEvents}
             />
           )}
           {screen === "settings" && (
             <SettingsScreen 
               language={language}
-              pillBoxConnected={effectivePillBoxConnected}
-              systemDeviceReady={demoMode || systemDeviceReady}
-              nativeWindowsKnown={demoMode || Boolean(nativeConnectedDevice)}
-              connectionTransport={effectiveConnectionTransport}
-              deviceName={resolvedDeviceName}
-              nativeWindowsConnected={effectiveNativeWindowsConnected}
-              schedules={effectiveSchedules}
+              schedules={medicineSchedules}
               onSchedulesChange={setMedicineSchedules}
               snoozeMinutes={snoozeMinutes}
               onSnoozeMinutesChange={setSnoozeMinutes}
-              smartSchedules={effectiveSmartSchedules}
+              smartSchedules={smartSchedules}
               onCreateSmartSchedule={addSmartSchedule}
               onUpdateSmartScheduleDayStatus={updateSmartScheduleDayStatus}
               onRemoveSmartSchedule={removeSmartSchedule}
-              demoMode={demoMode}
+            />
+          )}
+          {screen === "profile" && (
+            <ProfileScreen
+              language={language}
+              userProfile={userProfile}
+              onProfileChange={handleProfileChange}
+              onBack={() => setScreen("home")}
+              onLogout={handleLogout}
+              fontSize={fontSize}
+              onFontSizeChange={setFontSize}
+              remindersEnabled={remindersEnabled}
+              onRemindersEnabledChange={setRemindersEnabled}
+              soundAlerts={soundAlerts}
+              onSoundAlertsChange={setSoundAlerts}
+              voiceGuidance={voiceGuidance}
+              onVoiceGuidanceChange={handleVoiceGuidanceChange}
+              onTestVoice={handleTestVoice}
+              onTestNotification={handleTestNotification}
+              voiceGender={voiceGender}
+              onVoiceGenderChange={setVoiceGender}
+              ringtoneUri={ringtoneUri}
+              ringtoneTitle={ringtoneTitle}
+              onSelectRingtone={handleSelectRingtone}
             />
           )}
 
@@ -1812,6 +1486,7 @@ const Index = () => {
           medicineReminder={medicineReminder}
           open={reminderOpen}
           soundEnabled={soundAlerts}
+          ringtoneUri={ringtoneUri}
           onTaken={() => markCurrentReminderTaken("app")}
           onSnooze={() => {
             const snoozedMedicineReminder = medicineReminder;
@@ -1832,6 +1507,10 @@ const Index = () => {
               fallbackMessage: `Reminder snoozed for ${snoozeMinutes} minute${snoozeMinutes === 1 ? "" : "s"}.`,
             });
             if (snoozedMedicineReminder) {
+              const snoozeKey = `snooze:${snoozedMedicineReminder.scheduleId}`;
+              const snoozeTime = new Date(Date.now() + snoozeMinutes * 60 * 1000);
+              window.localStorage.setItem(snoozeKey, snoozeTime.toISOString());
+
               window.setTimeout(() => {
                 setMedicineReminder(snoozedMedicineReminder);
                 setReminderOpen(true);

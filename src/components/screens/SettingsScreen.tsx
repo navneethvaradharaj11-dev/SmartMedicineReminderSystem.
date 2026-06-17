@@ -6,6 +6,11 @@ import {
   Pill,
   Plus,
   Trash2,
+  Volume2,
+  Bell,
+  Megaphone,
+  Music,
+  Pencil,
 } from "lucide-react";
 import ScreenHeader from "@/components/ScreenHeader";
 import SmartScheduleCalendar from "@/components/schedules/SmartScheduleCalendar";
@@ -30,12 +35,6 @@ import { toast } from "sonner";
 
 interface SettingsScreenProps {
   language?: AppLanguage;
-  pillBoxConnected?: boolean;
-  systemDeviceReady?: boolean;
-  nativeWindowsKnown?: boolean;
-  nativeWindowsConnected?: boolean;
-  connectionTransport?: "serial" | "bluetooth" | null;
-  deviceName?: string;
   schedules: Schedule[];
   onSchedulesChange: (updater: SetStateAction<Schedule[]>) => void;
   snoozeMinutes: number;
@@ -48,17 +47,10 @@ interface SettingsScreenProps {
     status: SmartMedicineDayStatus
   ) => void;
   onRemoveSmartSchedule: (scheduleId: string) => void;
-  demoMode?: boolean;
 }
 
 const SettingsScreen = ({
   language = "en",
-  pillBoxConnected = false,
-  systemDeviceReady = false,
-  nativeWindowsKnown = false,
-  nativeWindowsConnected = false,
-  connectionTransport,
-  deviceName,
   schedules,
   onSchedulesChange,
   snoozeMinutes,
@@ -67,12 +59,15 @@ const SettingsScreen = ({
   onCreateSmartSchedule,
   onUpdateSmartScheduleDayStatus,
   onRemoveSmartSchedule,
-  demoMode = false,
 }: SettingsScreenProps) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newTime, setNewTime] = useState("08:00");
   const [timePeriod, setTimePeriod] = useState<"AM" | "PM">("AM");
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTime, setEditTime] = useState("08:00");
+  const [editPeriod, setEditPeriod] = useState<"AM" | "PM">("AM");
   const screenRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,45 +77,34 @@ const SettingsScreen = ({
   const copy =
     language === "ta"
       ? {
-          title: "அமைப்புகள்",
+          title: "நினைவூட்டல்கள்",
           subtitle: "உங்கள் நினைவூட்டல்களை நிர்வகிக்கவும்",
           sections: {
             medicineTimes: "மருந்து நேரங்கள்",
             reminderInterval: "நினைவூட்டல் இடைவெளி",
-            alerts: "எச்சரிக்கைகள்",
+            alerts: "அறிவிப்புகள்",
             device: "சாதனம்",
           },
           cancel: "ரத்து செய்யவும்",
-          addMedicine: "புதிய மருந்தை சேர்க்கவும்",
-          medicineName: "மருந்து பெயர்",
+          addMedicine: "புதிய மருந்தைச் சேர்க்கவும்",
+          medicineName: "மருந்தின் பெயர்",
           medicinePlaceholder: "எ.கா. Vitamin C - 500 mg",
           time: "நேரம்",
-          addMedicineButton: "மருந்தை சேர்க்கவும்",
-          snoozeBy: "நினைவூட்டலை இத்தனை நேரம் ஒத்திவைக்கவும்",
+          addMedicineButton: "மருந்தைச் சேர்க்கவும்",
+          snoozeBy: "நினைவூட்டலை ஒத்திவைக்கும் நேரம்:",
           minutesShort: "நிமி",
           enableReminders: "நினைவூட்டல்களை இயக்கவும்",
-          soundAlerts: "ஒலி எச்சரிக்கைகள்",
-          voiceGuidance: "டாக்பேக் முறை",
-          testVoice: "டாக்பேக் சோதனை",
+          soundAlerts: "ஒலி அறிவிப்புகள்",
+          voiceGuidance: "டாக்பேக் முறை (குரல் உதவி)",
+          testVoice: "குரல் உதவிச் சோதனை",
           smartPillBox: "ஸ்மார்ட் மருந்துப் பெட்டி",
-          connected: "இணைக்கப்பட்டுள்ளது",
-          connectedInWindows: "இந்த சாதனத்தில் இணைக்கப்பட்டுள்ளது",
-          pairedAndReady: "இணைக்கப்பட்டு தயாராக உள்ளது",
-          disconnected: "துண்டிக்கப்பட்டது",
-          noDeviceConnected: "எந்த சாதனமும் இணைக்கப்படவில்லை",
-          unnamedConnectedDevice: "பெயரில்லா இணைக்கப்பட்ட சாதனம்",
-          windowsConnectedDevice: "இணைக்கப்பட்ட சாதனம்",
-          savedDeviceAccess: "சேமித்த சாதன அணுகல் கண்டறியப்பட்டது",
-          pairFirst: "முதலில் புளூடூத் அமைப்புகளில் இணைக்கவும்",
-          connectedDevice: "இணைக்கப்பட்ட சாதனம்",
-          rememberedDevice: "நினைவில் உள்ள சாதனம்",
-          windowsSeesDevice: "இந்த சாதனம் கண்டறியப்பட்டது, ஆனால் தற்போது இணைக்கப்படவில்லை",
           enterMedicine: "மருந்தின் பெயரை உள்ளிடவும்",
           medicineAdded: "மருந்து சேர்க்கப்பட்டது",
-          activeTransportVia: "வழியாக",
+          editMedicine: "மருந்தைத் திருத்தவும்",
+          saveChanges: "மாற்றங்களைச் சேமிக்கவும்",
         }
       : {
-          title: "Settings",
+          title: "Reminders",
           subtitle: "Manage your reminders",
           sections: {
             medicineTimes: "Medicine Times",
@@ -141,31 +125,13 @@ const SettingsScreen = ({
           voiceGuidance: "TalkBack mode",
           testVoice: "Test TalkBack",
           smartPillBox: "Smart pill box",
-          connected: "Connected",
-          connectedInWindows: "Connected on this device",
-          pairedAndReady: "Paired and ready",
-          disconnected: "Disconnected",
-          noDeviceConnected: "No device connected",
-          unnamedConnectedDevice: "Unnamed connected device",
-          windowsConnectedDevice: "Connected device",
-          savedDeviceAccess: "Saved device access detected",
-          pairFirst: "Pair in Bluetooth settings first",
-          connectedDevice: "Connected device",
-          rememberedDevice: "Remembered device",
-          windowsSeesDevice: "This device was detected, but it is not currently connected",
           enterMedicine: "Please enter a medicine name",
           medicineAdded: "Medicine added",
-          activeTransportVia: "via",
+          editMedicine: "Edit medicine",
+          saveChanges: "Save changes",
         };
 
   const handleAdd = () => {
-    if (demoMode) {
-      toast.info("Demo mode is read-only", {
-        description: "Turn off Demo mode to edit real medicines.",
-      });
-      return;
-    }
-
     if (!newName.trim()) {
       toast.error(copy.enterMedicine);
       return;
@@ -226,19 +192,84 @@ const SettingsScreen = ({
     });
   };
 
+  const startEdit = (schedule: Schedule) => {
+    setEditingSchedule(schedule);
+    setEditName(schedule.name);
+    const match = schedule.time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) {
+      setEditTime(`${String(Number(match[1])).padStart(2, "0")}:${match[2]}`);
+      setEditPeriod(match[3].toUpperCase() as "AM" | "PM");
+    } else {
+      setEditTime("08:00");
+      setEditPeriod("AM");
+    }
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingSchedule) return;
+    if (!editName.trim()) {
+      toast.error(copy.enterMedicine);
+      return;
+    }
+
+    const [rawHour, mm] = editTime.split(":").map(Number);
+    const timeStr = `${rawHour}:${String(mm).padStart(2, "0")} ${editPeriod}`;
+
+    onSchedulesChange((prev) =>
+      prev.map((item) =>
+        item.id === editingSchedule.id
+          ? {
+              ...item,
+              name: editName.trim(),
+              time: timeStr,
+            }
+          : item
+      )
+    );
+
+    setEditingSchedule(null);
+    toast.success(language === "ta" ? "திருத்தப்பட்டது" : "Medicine updated", {
+      description: `${editName} - ${timeStr}`,
+    });
+  };
+
+  const adjustEditTime = (field: "hour" | "minute", delta: number) => {
+    setEditTime((current) => {
+      const [hour, minute] = current.split(":").map(Number);
+      if (field === "hour") {
+        const nextHour = ((hour - 1 + delta + 12) % 12) + 1;
+        return `${String(nextHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      }
+
+      const nextMinute = (minute + delta + 60) % 60;
+      return `${String(hour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+    });
+  };
+
+  const setEditTimePart = (field: "hour" | "minute", rawValue: string) => {
+    const digits = rawValue.replace(/\D/g, "");
+    if (!digits) return;
+
+    setEditTime((current) => {
+      const [hour, minute] = current.split(":").map(Number);
+      const parsed = Number(digits.slice(-2));
+
+      if (field === "hour") {
+        const nextHour = Math.min(12, Math.max(1, parsed));
+        return `${String(nextHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      }
+
+      const nextMinute = Math.min(59, Math.max(0, parsed));
+      return `${String(hour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+    });
+  };
+
   const updateSnoozeMinutes = (value: number) => {
     if (!Number.isFinite(value)) return;
     onSnoozeMinutesChange(Math.min(180, Math.max(1, Math.round(value))));
   };
 
   const handleRemoveMedicine = (scheduleId: string) => {
-    if (demoMode) {
-      toast.info("Demo mode is read-only", {
-        description: "Turn off Demo mode to remove real medicines.",
-      });
-      return;
-    }
-
     const removedSchedule = schedules.find((schedule) => schedule.id === scheduleId);
     onSchedulesChange((prev) => prev.filter((schedule) => schedule.id !== scheduleId));
     toast.success(language === "ta" ? "மருந்து நீக்கப்பட்டது" : "Medicine removed", {
@@ -251,12 +282,6 @@ const SettingsScreen = ({
     <div ref={screenRef} className="flex-1 overflow-y-auto bg-page text-foreground">
       <ScreenHeader title={copy.title} subtitle={copy.subtitle} />
       <div className="mx-auto w-full max-w-xl space-y-4 px-5 pb-28 sm:px-6">
-        {demoMode && (
-          <div className="rounded-2xl border border-primary/20 bg-primary-soft px-4 py-3 text-sm font-bold text-primary shadow-card">
-            Demo mode is active. Medicine and course edits are locked for the client walkthrough.
-          </div>
-        )}
-
         <section className="grid grid-cols-2 gap-3">
           <StatusTile
             Icon={Pill}
@@ -292,16 +317,24 @@ const SettingsScreen = ({
                   <div className="ml-auto flex shrink-0 items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => startEdit(schedule)}
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-primary/35 hover:bg-primary-soft hover:text-primary"
+                      aria-label={`Edit ${schedule.name}`}
+                      title="Edit"
+                    >
+                      <Pencil className="h-5 w-5" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleRemoveMedicine(schedule.id)}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-card transition-colors hover:border-destructive/35 hover:bg-destructive-soft hover:text-destructive"
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-destructive/35 hover:bg-destructive-soft hover:text-destructive"
                       aria-label={`Remove ${schedule.name}`}
                       title="Remove"
                     >
-                      <Trash2 className="h-4.5 w-4.5" strokeWidth={2.25} />
+                      <Trash2 className="h-5 w-5" strokeWidth={2} />
                     </button>
                     <Switch
                       checked={schedule.enabled}
-                      disabled={demoMode}
                       onCheckedChange={(checked) =>
                         onSchedulesChange((prev) =>
                           prev.map((item) =>
@@ -406,10 +439,87 @@ const SettingsScreen = ({
           </DialogContent>
         </Dialog>
 
+        <Dialog open={editingSchedule !== null} onOpenChange={(open) => !open && setEditingSchedule(null)}>
+          <DialogContent className="max-h-[80vh] w-[calc(100vw-2rem)] max-w-[420px] overflow-y-auto rounded-3xl border-border bg-card p-4 text-foreground">
+            <DialogHeader>
+              <DialogTitle className="pr-7 text-lg font-extrabold text-foreground">{copy.editMedicine}</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-foreground">
+                  {copy.medicineName}
+                </label>
+                <Input
+                  placeholder={copy.medicinePlaceholder}
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  className="mt-1 h-11 rounded-xl bg-background text-sm text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-foreground">
+                  {copy.time}
+                </label>
+                <div className="mt-1 rounded-2xl border border-border bg-background p-2.5">
+                  <div className="mb-2.5 flex items-center justify-between rounded-2xl bg-primary-soft px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Clock className="h-4 w-4" />
+                      <span className="text-xl font-extrabold tabular-nums">
+                        {editTime} {editPeriod}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_1fr_3.25rem] gap-2">
+                    <TimeStepper
+                      label={language === "ta" ? "மணி" : "Hour"}
+                      value={editTime.split(":")[0]}
+                      onChange={(value) => setEditTimePart("hour", value)}
+                      onIncrement={() => adjustEditTime("hour", 1)}
+                      onDecrement={() => adjustEditTime("hour", -1)}
+                    />
+                    <TimeStepper
+                      label={language === "ta" ? "நிமிடம்" : "Minute"}
+                      value={editTime.split(":")[1]}
+                      onChange={(value) => setEditTimePart("minute", value)}
+                      onIncrement={() => adjustEditTime("minute", 1)}
+                      onDecrement={() => adjustEditTime("minute", -1)}
+                    />
+                    <div className="grid overflow-hidden rounded-2xl border border-border bg-card">
+                      {(["AM", "PM"] as const).map((period) => (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => setEditPeriod(period)}
+                          className={cn(
+                            "text-sm font-extrabold transition-colors",
+                            editPeriod === period ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                          )}
+                        >
+                          {period}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSaveEdit}
+                className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground hover:opacity-95"
+              >
+                <Pencil className="mr-1.5 h-5 w-5" strokeWidth={2.5} />
+                {copy.saveChanges}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Section title={language === "ta" ? "Course calendar" : "Course calendar"}>
           <SmartScheduleCalendar
             language={language}
-            demoMode={demoMode}
             schedules={smartSchedules}
             onCreateSchedule={onCreateSmartSchedule}
             onUpdateDayStatus={onUpdateSmartScheduleDayStatus}
@@ -473,6 +583,9 @@ const SettingsScreen = ({
             </div>
           </div>
         </Section>
+
+
+
 
       </div>
     </div>

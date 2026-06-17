@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 import { nextDose } from "@/data/medicine";
 import { AppLanguage } from "@/lib/appLanguage";
 import { SmartScheduleReminder } from "@/lib/smartMedicineSchedule";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+
+interface RingtonePickerPlugin {
+  pickRingtone(options?: { existingUri?: string }): Promise<{ uri: string; title: string }>;
+  playRingtone(options: { uri: string }): Promise<void>;
+  stopRingtone(): Promise<void>;
+}
+
+const RingtonePicker = registerPlugin<RingtonePickerPlugin>("RingtonePicker");
 
 export interface MedicineTimeReminder {
   scheduleId?: string;
@@ -18,6 +27,7 @@ interface ReminderAlertProps {
   medicineReminder?: MedicineTimeReminder | null;
   open: boolean;
   soundEnabled?: boolean;
+  ringtoneUri?: string;
   onTaken: () => void;
   onSnooze: () => void;
 }
@@ -28,6 +38,7 @@ const ReminderAlert = ({
   medicineReminder,
   open,
   soundEnabled = true,
+  ringtoneUri = "",
   onTaken,
   onSnooze,
 }: ReminderAlertProps) => {
@@ -35,7 +46,21 @@ const ReminderAlert = ({
   const alarmIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!open || !soundEnabled || typeof window === "undefined") return;
+    if (!open || !soundEnabled) return;
+
+    if (Capacitor.isNativePlatform() && ringtoneUri) {
+      RingtonePicker.playRingtone({ uri: ringtoneUri }).catch((err) => {
+        console.error("Failed to play native ringtone:", err);
+      });
+
+      return () => {
+        RingtonePicker.stopRingtone().catch((err) => {
+          console.error("Failed to stop native ringtone:", err);
+        });
+      };
+    }
+
+    if (typeof window === "undefined") return;
 
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextConstructor) return;
@@ -49,36 +74,31 @@ const ReminderAlert = ({
       void audioContext.resume();
 
       const now = audioContext.currentTime;
-      const masterGain = audioContext.createGain();
-      const compressor = audioContext.createDynamicsCompressor();
-
-      compressor.threshold.setValueAtTime(-26, now);
-      compressor.knee.setValueAtTime(18, now);
-      compressor.ratio.setValueAtTime(3, now);
-      compressor.attack.setValueAtTime(0.02, now);
-      compressor.release.setValueAtTime(0.3, now);
-
-      masterGain.gain.setValueAtTime(0.0001, now);
-      masterGain.gain.linearRampToValueAtTime(0.32, now + 0.08);
-      masterGain.gain.setValueAtTime(0.32, now + 0.38);
-      masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
-
-      masterGain.connect(compressor);
-      compressor.connect(audioContext.destination);
-
-      const alarmTones = [
-        { frequency: 523.25, start: 0, duration: 0.42, type: "sine" as OscillatorType },
-        { frequency: 659.25, start: 0.16, duration: 0.48, type: "triangle" as OscillatorType },
+      // Polyphonic ascending chime notes (C5, E5, G5, C6)
+      const notes = [
+        { frequency: 523.25, start: 0, duration: 0.38 },      // C5
+        { frequency: 659.25, start: 0.14, duration: 0.38 },     // E5
+        { frequency: 783.99, start: 0.28, duration: 0.44 },     // G5
+        { frequency: 1046.50, start: 0.42, duration: 0.55 }     // C6
       ];
 
-      alarmTones.forEach(({ frequency, start, duration, type }) => {
-        const tone = audioContext.createOscillator();
+      notes.forEach(({ frequency, start, duration }) => {
+        const osc = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
 
-        tone.type = type;
-        tone.frequency.setValueAtTime(frequency, now + start);
-        tone.connect(masterGain);
-        tone.start(now + start);
-        tone.stop(now + start + duration);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(frequency, now + start);
+
+        // Smooth medical chime volume envelope (quick rise, exponential decay)
+        gainNode.gain.setValueAtTime(0.0001, now + start);
+        gainNode.gain.linearRampToValueAtTime(0.95, now + start + 0.03);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + start + duration - 0.01);
+
+        osc.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration);
       });
     };
 
@@ -96,7 +116,7 @@ const ReminderAlert = ({
       }
       audioContextRef.current = null;
     };
-  }, [open, soundEnabled]);
+  }, [open, soundEnabled, ringtoneUri]);
 
   if (!open) return null;
 
@@ -122,9 +142,9 @@ const ReminderAlert = ({
   const reminderTime = smartReminder?.time || medicineReminder?.time || nextDose.time;
 
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/45 p-4 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md rounded-3xl border border-border/60 bg-card p-5 shadow-float animate-in slide-in-from-bottom duration-300 sm:p-6"
+        className="w-full max-w-md rounded-3xl border border-border/60 bg-card p-5 shadow-float animate-in zoom-in-95 duration-200 sm:p-6"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="medicine-reminder-title"
