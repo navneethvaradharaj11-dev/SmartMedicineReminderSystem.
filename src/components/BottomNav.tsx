@@ -36,7 +36,7 @@ const BottomNav = ({ active, onChange, language = "en" }: BottomNavProps) => {
   const labels = navLabels[language];
 
   return (
-    <nav className="relative z-10 border-t border-border bg-card/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2.5 backdrop-blur-md">
+    <nav className="relative z-10 border-t border-border bg-card/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-1.5 backdrop-blur-md">
       <ul className="grid grid-cols-4 gap-1">
         {items.map(({ id, Icon }) => {
           const isActive = active === id;
@@ -46,7 +46,7 @@ const BottomNav = ({ active, onChange, language = "en" }: BottomNavProps) => {
               <button
                 onClick={() => onChange(id)}
                 className={cn(
-                  "relative flex min-h-[62px] w-full min-w-0 flex-col items-center justify-start gap-1 rounded-2xl px-1 py-2 transition-all duration-300",
+                  "relative flex min-h-[52px] w-full min-w-0 flex-col items-center justify-start gap-0.5 rounded-xl px-0.5 py-1 transition-all duration-300",
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
                 aria-current={isActive ? "page" : undefined}
@@ -55,13 +55,16 @@ const BottomNav = ({ active, onChange, language = "en" }: BottomNavProps) => {
               >
                 <div
                   className={cn(
-                    "flex h-8 w-11 items-center justify-center rounded-xl transition-all",
+                    "flex h-7 w-10 items-center justify-center rounded-lg transition-all",
                     isActive && "bg-primary-soft"
                   )}
                 >
-                  <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 2} />
+                  <Icon className="h-4.5 w-4.5" strokeWidth={isActive ? 2.5 : 2} />
                 </div>
-                <span className={cn("max-w-full text-center text-[10px] font-bold leading-3.5 [overflow-wrap:anywhere]", isActive && "text-primary")}>
+                <span className={cn(
+                  "max-w-full text-center text-[9px] font-bold leading-none tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis",
+                  isActive && "text-primary"
+                )}>
                   {label}
                 </span>
               </button>

@@ -16,6 +16,7 @@ import {
   saveActiveUserProfile,
   saveUserProfile,
   UserProfile,
+  loadActiveUserProfile,
 } from "@/lib/userProfile";
 import {
   addAppNotification,
@@ -171,6 +172,62 @@ const addDays = (date: Date, amount: number) => {
   return next;
 };
 
+export const checkIsVoiceMale = (name: string, voiceURI: string): boolean => {
+  const text = `${name} | ${voiceURI}`.toLowerCase();
+  const match = voiceURI.match(/-x-([a-z0-9]+)/);
+  const variant = match ? match[1] : "";
+
+  if (variant) {
+    if (
+      variant.endsWith("b") ||
+      variant.endsWith("d") ||
+      variant.endsWith("i") ||
+      variant.endsWith("j") ||
+      variant.endsWith("m") ||
+      variant.endsWith("o") ||
+      variant.includes("guy") ||
+      variant.includes("man")
+    ) {
+      return true;
+    }
+    if (
+      variant.endsWith("a") ||
+      variant.endsWith("c") ||
+      variant.endsWith("e") ||
+      variant.endsWith("f") ||
+      variant.endsWith("g") ||
+      variant.endsWith("h") ||
+      variant.endsWith("k") ||
+      variant.endsWith("l") ||
+      variant.endsWith("n") ||
+      variant.includes("girl") ||
+      variant.includes("woman")
+    ) {
+      return false;
+    }
+  }
+
+  if (
+    text.includes("#male") ||
+    text.includes("david") ||
+    text.includes("guy") ||
+    text.includes("ian") ||
+    text.includes("colin")
+  ) {
+    return true;
+  }
+
+  if (text.includes("male") && !text.includes("female")) {
+    return true;
+  }
+
+  if (text.includes("man") && !text.includes("woman")) {
+    return true;
+  }
+
+  return false;
+};
+
 const Index = () => {
   const [screen, setScreen] = useState<Screen>("home");
   const [reminderOpen, setReminderOpen] = useState(false);
@@ -180,7 +237,27 @@ const Index = () => {
   const [snoozeMinutes, setSnoozeMinutes] = useState(loadSnoozeMinutes);
   const activeMedicineReminderKeyRef = useRef<string | null>(null);
   const triggeredMedicineReminderKeysRef = useRef<Set<string>>(new Set());
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    const active = loadActiveUserProfile();
+    if (active) return active;
+
+    const defaultProfile = {
+      fullName: "Navneeth",
+      age: "68",
+      patientId: "MM-1988",
+      password: "1234"
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("gentle-dose-active-profile-v1", JSON.stringify(defaultProfile));
+        window.localStorage.setItem("gentle-dose-user-profiles-v1", JSON.stringify([defaultProfile]));
+      } catch (e) {
+        console.error("Failed to save default profile", e);
+      }
+    }
+    return defaultProfile;
+  });
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [fontSize, setFontSize] = useState<FontSizePreference>(() => {
     if (typeof window === "undefined") return "medium";
@@ -193,7 +270,7 @@ const Index = () => {
   });
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(() => {
     if (typeof window === "undefined") return "female";
-    return (window.localStorage.getItem("gentle-dose-voice-gender") as "female" | "male") || "female";
+    return (window.localStorage.getItem("gentle-dose-voice-gender") as "female" | "male") || "male";
   });
   const [remindersEnabled, setRemindersEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -735,52 +812,9 @@ const Index = () => {
         // Filter by gender keyword (checking both name and voiceURI)
         const isMale = voiceGender === "male";
         let genderVoices = candidates.filter((voice) => {
-          const name = (voice.name || "").toLowerCase();
-          const uri = (voice.voiceURI || "").toLowerCase();
-          const text = `${name} | ${uri}`;
-          const match = uri.match(/-x-([a-z0-9]+)/);
-          const variant = match ? match[1] : "";
-
-          if (isMale) {
-            return (
-              text.includes("male") ||
-              text.includes("david") ||
-              text.includes("guy") ||
-              text.includes("man") ||
-              text.includes("ian") ||
-              text.includes("colin") ||
-              text.includes("#male") ||
-              (variant && (
-                variant.endsWith("b") ||
-                variant.endsWith("d") ||
-                variant.endsWith("g") ||
-                variant.endsWith("m") ||
-                variant.includes("guy") ||
-                variant.includes("man")
-              ))
-            );
-          } else {
-            return (
-              text.includes("female") ||
-              text.includes("zira") ||
-              text.includes("girl") ||
-              text.includes("woman") ||
-              text.includes("google") ||
-              text.includes("natural") ||
-              text.includes("hazel") ||
-              text.includes("susan") ||
-              text.includes("#female") ||
-              (variant && (
-                variant.endsWith("a") ||
-                variant.endsWith("c") ||
-                variant.endsWith("e") ||
-                variant.endsWith("f") ||
-                variant.endsWith("l") ||
-                variant.includes("girl") ||
-                variant.includes("woman")
-              ))
-            );
-          }
+          const name = voice.name || "";
+          const uri = voice.voiceURI || "";
+          return checkIsVoiceMale(name, uri) === isMale;
         });
 
         const voiceList = genderVoices.length > 0 ? genderVoices : candidates;
@@ -915,52 +949,9 @@ const Index = () => {
                   const isMale = voiceGender === "male";
                   console.log(`[TTS Debug] Filtering matched voices for gender: ${voiceGender}`);
                   const genderMatched = candidates.filter(({ voice }) => {
-                    const name = (voice.name || "").toLowerCase();
-                    const uri = (voice.voiceURI || "").toLowerCase();
-                    const text = `${name} | ${uri}`;
-                    const match = uri.match(/-x-([a-z0-9]+)/);
-                    const variant = match ? match[1] : "";
-
-                    if (isMale) {
-                      return (
-                        text.includes("male") ||
-                        text.includes("david") ||
-                        text.includes("guy") ||
-                        text.includes("man") ||
-                        text.includes("ian") ||
-                        text.includes("colin") ||
-                        text.includes("#male") ||
-                        (variant && (
-                          variant.endsWith("b") ||
-                          variant.endsWith("d") ||
-                          variant.endsWith("g") ||
-                          variant.endsWith("m") ||
-                          variant.includes("guy") ||
-                          variant.includes("man")
-                        ))
-                      );
-                    } else {
-                      return (
-                        text.includes("female") ||
-                        text.includes("zira") ||
-                        text.includes("girl") ||
-                        text.includes("woman") ||
-                        text.includes("google") ||
-                        text.includes("natural") ||
-                        text.includes("hazel") ||
-                        text.includes("susan") ||
-                        text.includes("#female") ||
-                        (variant && (
-                          variant.endsWith("a") ||
-                          variant.endsWith("c") ||
-                          variant.endsWith("e") ||
-                          variant.endsWith("f") ||
-                          variant.endsWith("l") ||
-                          variant.includes("girl") ||
-                          variant.includes("woman")
-                        ))
-                      );
-                    }
+                    const name = voice.name || "";
+                    const uri = voice.voiceURI || "";
+                    return checkIsVoiceMale(name, uri) === isMale;
                   });
 
                   const bestMatch = genderMatched.length > 0 ? genderMatched[0] : candidates[0];

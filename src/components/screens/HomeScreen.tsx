@@ -203,43 +203,107 @@ const HomeScreen = ({
   const weekTaken = weeklyTrend.reduce((sum, day) => sum + day.taken, 0);
   const weekTotal = weeklyTrend.reduce((sum, day) => sum + day.total, 0);
   const weekPercent = Math.round((weekTaken / Math.max(weekTotal, 1)) * 100);
-  const currentStreak = useMemo(() => {
-    let streakCount = 0;
-    const reversedTrend = [...weeklyTrend].reverse();
+  const { currentStreak, bestStreak } = useMemo(() => {
+    const dateMap = new Map<string, { taken: number; missed: number }>();
     
-    for (let i = 0; i < reversedTrend.length; i++) {
-      const day = reversedTrend[i];
-      const isToday = i === 0;
-      
-      if (day.total === 0) {
-        continue;
+    doseTrackingRecords.forEach((r) => {
+      const entry = dateMap.get(r.dateKey) || { taken: 0, missed: 0 };
+      if (r.status === "taken") entry.taken++;
+      else if (r.status === "missed") entry.missed++;
+      dateMap.set(r.dateKey, entry);
+    });
+
+    Object.entries(notificationBackfillByDate).forEach(([dateKey, stats]) => {
+      if (!dateMap.has(dateKey)) {
+        dateMap.set(dateKey, { taken: stats.taken, missed: stats.missed });
       }
-      
-      const isPerfect = day.taken === day.total;
-      
-      if (isToday) {
-        if (isPerfect) {
-          streakCount++;
-        } else if (day.missed > 0) {
+    });
+
+    const todayStr = getLocalDateKey(now);
+
+    const isPerfectDay = (dateKey: string) => {
+      const entry = dateMap.get(dateKey);
+      if (!entry) return false;
+      return entry.taken > 0 && entry.missed === 0;
+    };
+
+    const hasMissedDose = (dateKey: string) => {
+      const entry = dateMap.get(dateKey);
+      return entry ? entry.missed > 0 : false;
+    };
+
+    let curStreak = 0;
+    let checkDate = new Date(now);
+
+    const todayKey = getLocalDateKey(checkDate);
+    if (hasMissedDose(todayKey)) {
+      curStreak = 0;
+    } else if (isPerfectDay(todayKey)) {
+      curStreak = 1;
+      checkDate.setDate(checkDate.getDate() - 1);
+      while (true) {
+        const key = getLocalDateKey(checkDate);
+        if (isPerfectDay(key)) {
+          curStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
           break;
         }
-      } else {
-        if (isPerfect) {
-          streakCount++;
+      }
+    } else {
+      checkDate.setDate(checkDate.getDate() - 1);
+      while (true) {
+        const key = getLocalDateKey(checkDate);
+        if (isPerfectDay(key)) {
+          curStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
         } else {
           break;
         }
       }
     }
-    return streakCount;
-  }, [weeklyTrend]);
+
+    const allRecordedDates = Array.from(dateMap.keys()).sort();
+    let maxStreak = curStreak;
+    
+    if (allRecordedDates.length > 0) {
+      let tempStreak = 0;
+      const oldestDate = new Date(allRecordedDates[0]);
+      let currentCheck = new Date(oldestDate);
+
+      while (getLocalDateKey(currentCheck) <= todayStr) {
+        const key = getLocalDateKey(currentCheck);
+        const entry = dateMap.get(key);
+
+        if (isPerfectDay(key)) {
+          tempStreak++;
+          if (tempStreak > maxStreak) {
+            maxStreak = tempStreak;
+          }
+        } else {
+          const isTodayCheck = key === todayStr;
+          if (isTodayCheck && (!entry || (entry.taken === 0 && entry.missed === 0))) {
+            // keep tempStreak
+          } else {
+            tempStreak = 0;
+          }
+        }
+        currentCheck.setDate(currentCheck.getDate() + 1);
+      }
+    }
+
+    return { currentStreak: curStreak, bestStreak: maxStreak };
+  }, [doseTrackingRecords, now]);
+
+  const milestoneDays = currentStreak < 7 ? 7 : currentStreak < 30 ? 30 : 100;
+  const daysToGo = milestoneDays - currentStreak;
 
   const weekDetailItems = weeklyTrend.map((day) => ({
     title: day.label,
     subtitle: `${day.taken}/${day.total} ${language === "ta" ? "மாத்திரைகள் உட்கொள்ளப்பட்டன" : "doses taken"}`,
     tone: day.value === 100 ? "success" : day.value === 0 ? "destructive" : "warning",
     badge: `${day.value}%`,
-    Icon: day.value === 100 ? CheckCircle2 : TrendingUp,
+    Icon: day.value === 100 ? CheckCircle2 : day.value === 0 ? XCircle : TrendingUp,
   }));
 
   const groupedHistory = {
@@ -302,12 +366,12 @@ const HomeScreen = ({
             streakTitle: "தற்போதைய தொடர்",
             streakDescription: `${currentStreak} நாட்கள் தொடர்ந்து`,
             bestStreak: "சிறந்த தொடர்",
-            lastMonth: "கடந்த மாதம் - 14 நாட்கள்",
+            bestStreakDescription: `${bestStreak} நாட்கள்`,
             thisStreak: "இந்த தொடர்",
-            startedMay9: "மே 9 அன்று தொடங்கியது",
+            thisStreakDescription: `${currentStreak} நாட்கள்`,
             nextMilestone: "அடுத்த இலக்கு",
-            weekBadge: "1 வார பேட்ஜ்",
-            oneDayToGo: "இன்னும் 1 நாள்",
+            milestoneBadge: milestoneDays === 7 ? "1 வார பேட்ஜ்" : milestoneDays === 30 ? "1 மாத பேட்ஜ்" : "100 நாட்கள் பேட்ஜ்",
+            daysToGoLabel: daysToGo === 1 ? "இன்னும் 1 நாள்" : `இன்னும் ${daysToGo} நாட்கள்`,
             medicinesTitle: "அனைத்து மாத்திரைகள்",
             medicinesDescription: `${totalMeds} செயலில் உள்ளவை`,
             dailyAt: "தினமும்",
@@ -378,12 +442,12 @@ const HomeScreen = ({
             streakTitle: "Current streak",
             streakDescription: `${currentStreak} day${currentStreak === 1 ? "" : "s"} in a row`,
             bestStreak: "Best streak",
-            lastMonth: "14 days - last month",
+            bestStreakDescription: `${bestStreak} day${bestStreak === 1 ? "" : "s"}`,
             thisStreak: "This streak",
-            startedMay9: "Started May 9",
+            thisStreakDescription: `${currentStreak} day${currentStreak === 1 ? "" : "s"}`,
             nextMilestone: "Next milestone",
-            weekBadge: "1 week badge",
-            oneDayToGo: "1d to go",
+            milestoneBadge: milestoneDays === 7 ? "1 week badge" : milestoneDays === 30 ? "1 month badge" : "100 days badge",
+            daysToGoLabel: `${daysToGo}d to go`,
             medicinesTitle: "All medicines",
             medicinesDescription: `${totalMeds} active medicines on schedule`,
             dailyAt: "Daily at",
@@ -517,38 +581,38 @@ const HomeScreen = ({
   const initial = username.trim().charAt(0).toUpperCase() || "U";
 
   return (
-    <div className="flex-1 overflow-y-auto bg-page">
-      <div className="hero-surface relative overflow-hidden rounded-b-[2rem] bg-hero px-5 pb-16 pt-5 text-primary-foreground sm:px-6">
+    <div className="flex-1 overflow-y-auto bg-page scrollbar-none">
+      <div className="hero-surface relative overflow-hidden rounded-b-[1.75rem] bg-hero px-4 pb-11 pt-3.5 text-primary-foreground sm:px-5">
         <div className="mx-auto w-full max-w-xl">
           <div className="relative flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-primary-foreground/70">
                 {greeting}
               </p>
-              <h1 className="mt-0.5 break-words text-xl font-bold leading-tight">{username}</h1>
+              <h1 className="mt-0.5 break-words text-lg font-extrabold leading-tight">{username}</h1>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 onClick={onLogout}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur transition-colors hover:bg-white/25"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 backdrop-blur transition-colors hover:bg-white/25"
                 aria-label="Sign out"
                 title="Sign out"
               >
-                <LogOut className="h-4 w-4" strokeWidth={2.4} />
+                <LogOut className="h-3.5 w-3.5" strokeWidth={2.4} />
               </button>
             </div>
           </div>
 
-          <div className="relative mt-5 flex flex-wrap items-baseline gap-3">
-            <span className="tabular-nums break-words text-5xl font-extrabold leading-none tracking-tight">{timeStr}</span>
+          <div className="relative mt-2.5 flex items-center gap-2">
+            <span className="tabular-nums text-3xl font-extrabold leading-none tracking-tight">{timeStr}</span>
+            <span className="text-xs font-semibold text-primary-foreground/80 border-l border-white/20 pl-2">{dateStr}</span>
           </div>
-          <p className="relative mt-2 text-sm font-medium text-primary-foreground/80">{dateStr}</p>
 
-          <div className="relative mt-4 flex flex-wrap items-center gap-2">
-            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 backdrop-blur">
-              <span className={cn("h-2 w-2 animate-soft-pulse rounded-full", statusConfig.dot)} />
-              <span className="min-w-0 break-words text-xs font-bold leading-4">{statusConfig.label}</span>
+          <div className="relative mt-3 flex flex-wrap items-center gap-1.5">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-2.5 py-1 backdrop-blur">
+              <span className={cn("h-1.5 w-1.5 animate-soft-pulse rounded-full", statusConfig.dot)} />
+              <span className="text-[10px] font-bold leading-none">{statusConfig.label}</span>
             </div>
             <ConnPillButton
               Icon={isNight ? Moon : Sun}
@@ -566,65 +630,62 @@ const HomeScreen = ({
         </div>
       </div>
 
-      <div className="relative z-10 -mt-12 px-4 sm:px-5">
-        <div className="mx-auto w-full max-w-xl rounded-3xl border border-border/60 bg-card-gradient p-5 shadow-soft">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
+      <div className="relative z-10 -mt-7 px-4 sm:px-5">
+        <div className="mx-auto w-full max-w-xl rounded-2xl border border-border/60 bg-card-gradient p-4 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-widest text-primary">
               <Sparkles className="h-3.5 w-3.5" />
               {copy.nextMedicine}
             </p>
-            <span className="min-w-0 break-words text-left text-xs font-semibold text-muted-foreground sm:text-right">{featuredReminder.contextLabel}</span>
+            <span className="text-[10px] font-bold text-muted-foreground">{featuredReminder.contextLabel}</span>
           </div>
 
-          <div className="mt-3 flex items-start gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-hero shadow-glow">
-              <Pill className="h-8 w-8 text-primary-foreground" strokeWidth={2.2} />
+          <div className="mt-2.5 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-hero shadow-glow">
+              <Pill className="h-5.5 w-5.5 text-primary-foreground" strokeWidth={2.2} />
             </div>
 
             <div className="min-w-0 flex-1">
-              <h2 className="break-words text-2xl font-extrabold leading-tight text-foreground">{featuredReminder.name}</h2>
-              <p className="mt-0.5 break-words text-sm font-medium text-muted-foreground">{featuredReminder.dosage}</p>
+              <h2 className="break-words text-lg font-extrabold leading-tight text-foreground">{featuredReminder.name}</h2>
+              <p className="mt-0.5 break-words text-xs font-semibold text-muted-foreground">{featuredReminder.dosage}</p>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-1.5">
             <Chip Icon={Clock} label={featuredReminder.time} />
             {featuredReminder.withFood && <Chip Icon={Utensils} label={copy.withFood} />}
+          </div>
+
+          <div className="mt-3.5">
+            <Button
+              size="sm"
+              onClick={() => {
+                setStatus("taken");
+                if (nextMedicineSchedule?.schedule.id) {
+                  onTrackDose(nextMedicineSchedule.schedule.id, "taken");
+                }
+                onMarkSmartReminderTaken?.();
+                toast.success(copy.markedAsTaken, {
+                  description: `${featuredReminder.name} - ${featuredReminder.dosage}`,
+                });
+              }}
+              disabled={status === "taken"}
+              className={cn(
+                "h-auto min-h-10 w-full whitespace-normal rounded-xl px-4 py-2 text-center text-xs font-bold leading-5 shadow-soft transition-all active:scale-[0.98]",
+                status === "taken"
+                  ? "bg-success/20 text-success border border-success/30 cursor-default"
+                  : "bg-success text-success-foreground hover:bg-success/90"
+              )}
+            >
+              <CheckCircle2 className="mr-1.5 h-4.5 w-4.5" strokeWidth={2.5} />
+              {status === "taken" ? copy.markedAsTaken : copy.markAsTaken}
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 px-4 sm:px-5">
-        <div className="mx-auto w-full max-w-xl">
-          <Button
-            size="lg"
-            onClick={() => {
-              setStatus("taken");
-              if (nextMedicineSchedule?.schedule.id) {
-                onTrackDose(nextMedicineSchedule.schedule.id, "taken");
-              }
-              onMarkSmartReminderTaken?.();
-              toast.success(copy.markedAsTaken, {
-                description: `${featuredReminder.name} - ${featuredReminder.dosage}`,
-              });
-            }}
-            disabled={status === "taken"}
-            className={cn(
-              "h-auto min-h-14 w-full whitespace-normal rounded-2xl px-4 py-3 text-center text-base font-bold leading-5 text-success-foreground shadow-soft transition-all",
-              status === "taken"
-                ? "bg-success/80"
-                : "bg-success-gradient hover:opacity-95 active:scale-[0.98]"
-            )}
-          >
-            <CheckCircle2 className="mr-2 h-6 w-6" strokeWidth={2.5} />
-            {status === "taken" ? copy.markedAsTaken : copy.markAsTaken}
-          </Button>
-
-        </div>
-      </div>
-
-      <div className="mt-4 px-4 sm:px-5">
-        <div className="mx-auto grid w-full max-w-xl grid-cols-3 gap-3">
+      <div className="mt-3 px-4 sm:px-5">
+        <div className="mx-auto grid w-full max-w-xl grid-cols-3 gap-2">
           <Stat
             Icon={CheckCircle2}
             label={copy.stats.today}
@@ -646,37 +707,46 @@ const HomeScreen = ({
             tone="warning"
             onClick={() => announceStatButton(copy.stats.streak, "streak")}
           />
-          <Stat
-            Icon={Pill}
-            label={copy.stats.medicines}
-            value={String(totalMeds)}
-            tone="primary"
-            onClick={() => announceStatButton(copy.stats.medicines, "medicines")}
-          />
-          <Stat
-            Icon={Package}
-            label={copy.stats.lowStock}
-            value={String(lowStockMeds.length)}
-            tone={lowStockMeds.length > 0 ? "warning" : "success"}
-            onClick={() => announceStatButton(copy.stats.lowStock, "lowStock")}
-          />
-          <Stat
-            Icon={ShieldAlert}
-            label={copy.stats.expiring}
-            value={String(expiringMeds.length)}
-            tone={expiringMeds.length > 0 ? "destructive" : "success"}
-            onClick={() => announceStatButton(copy.stats.expiring, "expiring")}
-          />
         </div>
       </div>
 
+      <div className="mt-2.5 px-4 sm:px-5">
+        <div className="mx-auto w-full max-w-xl flex items-center justify-between gap-1 rounded-2xl border border-border/40 bg-card/65 px-3 py-2 text-[10px] font-bold text-muted-foreground shadow-sm">
+          <button
+            type="button"
+            onClick={() => announceStatButton(copy.stats.medicines, "medicines")}
+            className="flex items-center gap-1 hover:text-primary transition-colors"
+          >
+            <Pill className="h-3.5 w-3.5 text-primary" />
+            <span>{totalMeds} {language === "ta" ? "மருந்துகள்" : "Medicines"}</span>
+          </button>
+          <span className="h-3 w-px bg-border/80" />
+          <button
+            type="button"
+            onClick={() => announceStatButton(copy.stats.lowStock, "lowStock")}
+            className={cn("flex items-center gap-1 transition-colors hover:text-warning", lowStockMeds.length > 0 && "text-warning")}
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span>{lowStockMeds.length} {language === "ta" ? "குறைந்த இருப்பு" : "Low stock"}</span>
+          </button>
+          <span className="h-3 w-px bg-border/80" />
+          <button
+            type="button"
+            onClick={() => announceStatButton(copy.stats.expiring, "expiring")}
+            className={cn("flex items-center gap-1 transition-colors hover:text-destructive", expiringMeds.length > 0 && "text-destructive")}
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+            <span>{expiringMeds.length} {language === "ta" ? "காலாவதி" : "Expiring"}</span>
+          </button>
+        </div>
+      </div>
 
-      <div className="mt-3 px-4 sm:px-5">
+      <div className="mt-2.5 px-4 sm:px-5">
         <div className="mx-auto w-full max-w-xl">
           <button
             type="button"
             onClick={() => setDetail("doseHistory")}
-            className="w-full rounded-2xl border border-border/60 bg-card p-4 text-left shadow-card transition-all hover:shadow-soft active:scale-[0.99]"
+            className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-card transition-all hover:shadow-soft active:scale-[0.99]"
           >
             <MiniBars
               data={weeklyTrend}
@@ -687,22 +757,22 @@ const HomeScreen = ({
         </div>
       </div>
 
-      <div className="mt-3 px-4 pb-10 sm:px-5">
-        <div className="mx-auto grid w-full max-w-xl gap-3">
-          <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
-            <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mt-2.5 px-4 pb-4 sm:px-5">
+        <div className="mx-auto grid w-full max-w-xl gap-2">
+          <section className="rounded-2xl border border-border/60 bg-card p-3 shadow-card">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-extrabold text-foreground">
+                <h2 className="text-xs font-extrabold text-foreground">
                   {language === "ta" ? "இன்றைய சுருக்கம்" : "Today overview"}
                 </h2>
-                <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                <p className="mt-0.5 text-[10px] font-semibold text-muted-foreground">
                   {language === "ta" ? "மருந்து நிலை மற்றும் வார முன்னேற்றம்" : "Dose status and weekly progress"}
                 </p>
               </div>
               <ProgressBadge value={todayPercent} />
             </div>
 
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <MetricPill label={copy.details.taken} value={todayTaken} tone="success" />
               <MetricPill label={copy.details.missed} value={todayMissed} tone="destructive" />
               <MetricPill label={language === "ta" ? "மீதம்" : "Left"} value={todayLeft} tone="warning" />
@@ -748,15 +818,7 @@ const HomeScreen = ({
             <DetailView
               title={copy.details.weeklyTitle}
               description={copy.details.weeklyDescription}
-              items={[
-                { title: language === "ta" ? "திங்" : "Mon", subtitle: language === "ta" ? "3/3 மருந்துகள் எடுத்தார்" : "3/3 doses taken", tone: "success", badge: "100%", Icon: CheckCircle2 },
-                { title: language === "ta" ? "செவ்" : "Tue", subtitle: language === "ta" ? "3/3 மருந்துகள் எடுத்தார்" : "3/3 doses taken", tone: "success", badge: "100%", Icon: CheckCircle2 },
-                { title: language === "ta" ? "புத" : "Wed", subtitle: language === "ta" ? "2/3 மருந்துகள் எடுத்தார்" : "2/3 doses taken", tone: "warning", badge: "67%", Icon: TrendingUp },
-                { title: language === "ta" ? "வியா" : "Thu", subtitle: language === "ta" ? "3/3 மருந்துகள் எடுத்தார்" : "3/3 doses taken", tone: "success", badge: "100%", Icon: CheckCircle2 },
-                { title: language === "ta" ? "வெள்" : "Fri", subtitle: language === "ta" ? "3/3 மருந்துகள் எடுத்தார்" : "3/3 doses taken", tone: "success", badge: "100%", Icon: CheckCircle2 },
-                { title: language === "ta" ? "சனி" : "Sat", subtitle: language === "ta" ? "3/3 மருந்துகள் எடுத்தார்" : "3/3 doses taken", tone: "success", badge: "100%", Icon: CheckCircle2 },
-                { title: language === "ta" ? "ஞாயி" : "Sun", subtitle: language === "ta" ? "2/3 மருந்துகள் எடுத்தார்" : "2/3 doses taken", tone: "warning", badge: "67%", Icon: TrendingUp },
-              ]}
+              items={weekDetailItems}
             />
           )}
 
@@ -765,9 +827,9 @@ const HomeScreen = ({
               title={copy.details.streakTitle}
               description={copy.details.streakDescription}
               items={[
-                { title: copy.details.bestStreak, subtitle: copy.details.lastMonth, tone: "warning", badge: language === "ta" ? "சிறந்தது" : "Best", Icon: Flame },
-                { title: copy.details.thisStreak, subtitle: copy.details.startedMay9, tone: "primary", badge: "6d", Icon: Flame },
-                { title: copy.details.nextMilestone, subtitle: copy.details.weekBadge, tone: "success", badge: copy.details.oneDayToGo, Icon: Sparkles },
+                { title: copy.details.bestStreak, subtitle: copy.details.bestStreakDescription, tone: "warning", badge: language === "ta" ? "சிறந்தது" : "Best", Icon: Flame },
+                { title: copy.details.thisStreak, subtitle: copy.details.thisStreakDescription, tone: "primary", badge: `${currentStreak}d`, Icon: Flame },
+                { title: copy.details.nextMilestone, subtitle: copy.details.milestoneBadge, tone: "success", badge: copy.details.daysToGoLabel, Icon: Sparkles },
               ]}
             />
           )}
