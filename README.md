@@ -1,10 +1,10 @@
 # MediMind — Intelligent Medication Reminder System
 
-[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://medimind.vercel.app)  [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://smart-medicine-reminder-system.vercel.app)  [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 Modern, cross-platform medication adherence system combining a React + TypeScript web dashboard with a lightweight Python BLE gateway and Arduino firmware for an IoT smart pillbox.
 
-Live demo: https://medimind.vercel.app
+Live demo: https://smart-medicine-reminder-system.vercel.app
 
 ---
 
