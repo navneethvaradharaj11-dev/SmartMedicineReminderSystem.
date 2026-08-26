@@ -1,204 +1,185 @@
 # 💊 Smart Medicine Reminder System (Gentle Dose)
 
-[![Vercel Live](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://smart-medicine-reminder-system.vercel.app)
-[![Vite](https://img.shields.io/badge/Vite-5.4.19-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![React](https://img.shields.io/badge/React-18.3.1-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Arduino](https://img.shields.io/badge/Arduino-Firmware-00979D?style=for-the-badge&logo=arduino&logoColor=white)](https://www.arduino.cc/)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://smart-medicine-reminder-system.vercel.app)  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 
-🌐 **Live Vercel Application**: [https://smart-medicine-reminder-system.vercel.app](https://smart-medicine-reminder-system.vercel.app)
+Modern, cross-platform medication adherence system combining a React + TypeScript web dashboard with a lightweight Python BLE gateway and Arduino firmware for an IoT smart pillbox.
 
-An intelligent, cross-platform healthcare assistant designed to improve medication adherence. **Gentle Dose** pairs a state-of-the-art React web application with a physical IoT Smart Pillbox via a Python-based Bluetooth gateway. It features rich visual dashboard metrics, adherence analytics, a virtual pillbox, and fully integrated English and Tamil voice assistant support to facilitate usage by the elderly and visually impaired.
+Live demo: https://smart-medicine-reminder-system.vercel.app
 
 ---
 
-## 🌟 Key Features
+## Table of Contents
 
-*   **📊 Adherence Analytics & Dashboard**: Displays patient adherence scores, upcoming doses, and a virtual representation of the physical pillbox layout.
-*   **🔊 Bi-lingual Voice Assistance**: Fully integrated audio assistant supporting English and Tamil voice commands, talkback, and auditory reminders to enhance accessibility.
-*   **🔗 IoT Bluetooth Integration**: Seamless Windows Bluetooth pairing and communication with the physical smart pillbox.
-*   **📁 Dose History Log**: Complete adherence records tracking taken/skipped doses in an interactive calendar and list layout.
-*   **👤 Patient & Caretaker Profiles**: Configurable doctor details, emergency contacts, medicine lists, and caretakers.
-*   **🤖 Hardware Diagnostics**: Diagnostic tools for testing buttons, buzzer indicators, and BLE serial connectivity.
-
----
-
-## 🏗 System Architecture
-
-The project consists of three tightly coupled components:
-
-1.  **Vite + React UI**: The modern frontend dashboard that schedules medicines, displays analytics, and controls reminder statuses.
-2.  **Python BLE Serial Gateway**: A local background server that acts as a bridge, utilizing Python's native serial/socket capabilities to communicate with the hardware pillbox and expose APIs to the frontend.
-3.  **Arduino Smart Pillbox**: The physical IoT device equipped with LED indicator rings, an alarm buzzer, and a confirmation button.
-
-```mermaid
-graph TD
-    subgraph Frontend [React Web App]
-        A[Vite + TS Dashboard] <-->|Fetch / WebSockets| B[Local API Proxy]
-    end
-
-    subgraph Gateway [Python Serial Bridge]
-        B <-->|localhost:8765| C[Python BLE Gateway]
-    end
-
-    subgraph Hardware [Physical IoT Pillbox]
-        C <-->|HC-05 Bluetooth Serial| D[Arduino Microcontroller]
-        D -->|Triggers| E[Buzzer / LEDs]
-        F[Physical Push Button] -->|Stops Alarm| D
-    end
-    
-    style Frontend fill:#646CFF,stroke:#333,stroke-width:2px,color:#fff
-    style Gateway fill:#3776AB,stroke:#333,stroke-width:2px,color:#fff
-    style Hardware fill:#00979D,stroke:#333,stroke-width:2px,color:#fff
-```
+- [About](#about)
+- [Key Features](#key-features)
+- [Tech Stack](#tech-stack)
+- [System Architecture](#system-architecture)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Install & Run (Frontend)](#install--run-frontend)
+  - [Python BLE Gateway](#python-ble-gateway)
+  - [Arduino Firmware](#arduino-firmware)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Security](#security)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
 
 ---
 
-## ⚙️ Component Details
+## About
 
-### 1. Web Application (`src/`)
--   **State Management & Routing**: React Router DOM & Tailwind animations.
--   **UI Library**: Shadcn UI & Radix UI primitives.
--   **Localization**: English & Tamil localizations with dynamic voice synthesize APIs.
+Gentle Dose is an intelligent medication reminder and adherence analytics platform that pairs a web-based dashboard with a physical IoT smart pillbox. The system supports voice reminders (English & Tamil), BLE communication to the pillbox, a dose history log, caregiver profiles, and accessibility-focused audio feedback.
 
-### 2. Python Bluetooth Gateway (`gentle_dose.py`)
--   Exposes a native Bluetooth API on `http://127.0.0.1:8765`.
--   Handles automatic serial connection with the HC-05 Bluetooth transceiver.
--   Routes real-time hardware state updates to the React app.
-
-### 3. Arduino Firmware (`arduino/smart_medicine_reminder/`)
--   Synchronizes system time automatically from the Python gateway via `TIME:HH:MM:SS` commands.
--   Sounds high-pitch alarms (`ALARM:START`) when a dose is due.
--   Monitors the confirmation button to dispatch `BTN:PRESSED` signals, shutting off alarms and updating adherence logs.
+This repository contains three main components:
+1. Web dashboard (Vite + React + TypeScript)
+2. Python BLE serial gateway (local bridge to hardware)
+3. Arduino firmware for the pillbox
 
 ---
 
-## 🛠️ Installation & Setup
+## Key Features
+
+- Adherence analytics and visual dashboards
+- Multi-language voice reminders and accessibility support
+- Bluetooth Low Energy (BLE) integration with a physical pillbox
+- Local Python gateway to expose a secure API to the frontend
+- Offline-safe design with local device pairing and status monitoring
+- Hardware diagnostics for buzzer, LEDs, and buttons
+
+---
+
+## Tech Stack
+
+- Frontend: React, TypeScript, Vite, Tailwind CSS
+- Backend / Gateway: Python (BLE / serial bridge)
+- Firmware: Arduino (C/C++)
+- CI / CD: GitHub Actions, Vercel for frontend hosting
+
+---
+
+## System Architecture
+
+The frontend communicates with a local Python BLE gateway via HTTP/websockets. The gateway connects to the Arduino-based pillbox over a serial/Bluetooth link and relays hardware events and commands.
+
+(High-level)
+
+- Frontend (Vite + React) <--> Python BLE Gateway (localhost:8765) <--> Arduino (HC-05 / Serial)
+
+---
+
+## Getting Started
 
 ### Prerequisites
--   [Node.js](https://nodejs.org/) (v18 or higher)
--   [Python 3.10+](https://www.python.org/downloads/)
--   [Arduino IDE](https://www.arduino.cc/en/software) (for uploading firmware)
 
-### 1. Setting up the Web App
+- Node.js (v18+)
+- npm or bun
+- Python 3.10+
+- Arduino IDE (for uploading firmware)
 
-Navigate to the project root directory and install dependencies:
+### Install & Run (Frontend)
 
-```powershell
-# Navigate to project directory
-cd gentle-dose-main
+1. Clone the repo:
 
-# Install frontend dependencies
-npm install
+```bash
+git clone https://github.com/navneethvaradharaj11-dev/SmartMedicineReminderSystem.git
+cd SmartMedicineReminderSystem
 ```
 
-To run the standalone web application locally:
+2. Install dependencies and run the dev server:
 
-```powershell
+```bash
+npm install
 npm run dev -- --host 127.0.0.1
 ```
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173) in your browser.
 
----
+Open http://127.0.0.1:5173 to view the dashboard.
 
-### 2. Running with Physical Hardware (Python Bridge)
+### Python BLE Gateway
 
-If you are using the physical IoT Pillbox, build the production frontend assets and launch the Python native gateway:
+The Python gateway provides a local API (default: http://127.0.0.1:8765) to bridge BLE/serial communications with the frontend.
 
-```powershell
-# Build Vite production assets
-npm run build
+Run the gateway (example):
 
-# Start the Python BLE serial server
+```bash
+# from project root
 python gentle_dose.py
 ```
 
-For custom serial connection parameters (e.g. connecting to a specific HC-05 address):
+Check gateway options and environment variables in the repository files.
 
-```powershell
-python hardware_reminder_controller.py --address 00:25:12:00:23:35 --reminder 19:15
-```
+### Arduino Firmware
 
----
-
-### 3. Uploading Arduino Firmware
-
-1.  Connect your Arduino (Nano/ESP32/Uno) to your computer.
-2.  Open `arduino/smart_medicine_reminder/smart_medicine_reminder.ino` in the Arduino IDE.
-3.  Configure your pin layout in the sketch:
-    -   `BT_RX` & `BT_TX` for Bluetooth Serial (default Pins 2 & 3).
-    -   `BUZZER_PIN` (default Pin 8).
-    -   `BUTTON_PIN` (default Pin 7).
-4.  Select your board and COM port, then click **Upload**.
+1. Open `arduino/smart_medicine_reminder/smart_medicine_reminder.ino` in the Arduino IDE.
+2. Configure pins and the Bluetooth serial parameters (HC-05) as required.
+3. Upload to your board (Nano/Uno/ESP32 as applicable).
 
 ---
 
-## 🧪 Testing
+## Configuration
 
-The codebase includes full React testing utilities powered by **Vitest**:
+- The repository includes a `.env.example` (recommended). Copy it to `.env` locally and populate secrets/keys.
+- Important environment variables (examples):
+  - VITE_API_URL (default: http://127.0.0.1:8765)
+  - HC05_BT_ADDRESS
+  - SERIAL_PORT / SERIAL_BAUD
 
-```powershell
-# Run the test suite once
+Do NOT commit real secrets to the repository. Remove any accidental secret leaks and rotate keys if needed.
+
+---
+
+## Testing
+
+Run the test suite (Vitest):
+
+```bash
 npm run test
+```
 
-# Run tests in watch mode
-npm run test:watch
+Run linters and type checks before committing:
+
+```bash
+npm run lint
+npm run build
 ```
 
 ---
 
-## 🚀 GitHub Actions CI/CD Workflow
+## Deployment
 
-A professional CI/CD pipeline is configured in `.github/workflows/ci.yml` that automatically:
-1.  Triggers on every `push` and `pull_request` to the `main` branch.
-2.  Sets up Node.js.
-3.  Installs dependencies, runs the ESLint checker (`npm run lint`), runs automated tests (`npm run test`), and verifies the production build (`npm run build`).
+The frontend is configured for Vercel deployment (see `vercel.json`). To deploy manually, connect the repository to Vercel and set required environment variables in the Vercel dashboard.
 
 ---
 
-## 🔐 Deploying to GitHub (Google-Linked Accounts)
+## Security
 
-Because your GitHub account is linked to your Google Account, follow these simple steps to authenticate and push this project:
-
-### Option A: Authenticaton via Git Credential Manager (Easiest)
-1. Initialize the local repository and commit files (see below).
-2. Push your project to GitHub. A Windows popup will appear.
-3. Select **"Sign in with your browser"** and choose your Google/GitHub account.
-
-### Option B: Authentication via GitHub CLI
-Install GitHub CLI on your Windows machine and authenticate:
-```powershell
-# Login with GitHub CLI
-gh auth login
-```
-*Choose `GitHub.com` -> `HTTPS` -> `Yes` (to authenticate Git) -> `Login with a web browser`. Copy the code provided, paste it into the browser window, and log in with your Google-tied GitHub credentials.*
-
-### Commands to Push Your Project:
-Create a new public repository named `smart-medicine-reminder-system` on GitHub, then run:
-
-```powershell
-# Initialize git in the project root
-git init
-
-# Set the default branch to main
-git branch -M main
-
-# Add all files to stage (excluding those in .gitignore)
-git add .
-
-# Create the initial commit
-git commit -m "feat: Initial commit of Smart Medicine Reminder System (Gentle Dose)"
-
-# Link your local repository to GitHub
-git remote add origin https://github.com/navneethvaradharaj11-dev/smart-medicine-reminder-system.git
-
-# Push your code to the remote repository
-git push -u origin main
-```
+- Secrets must live in environment variables or a secrets manager. If you’ve accidentally pushed `.env`, remove it and rotate all exposed keys immediately.
+- Use `.env.example` to document required variables without exposing values.
 
 ---
 
-## 📄 License
+## Contributing
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Contributions are welcome. Please follow these steps:
+
+1. Fork the repository and create a feature branch: `git checkout -b feat/your-feature`
+2. Make changes and run tests/linting locally
+3. Open a pull request describing the change and context
+
+Please adhere to the existing code style and include tests for new behavior.
+
+---
+
+## License
+
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Contact
+
+Navneeth Varadharaj — https://github.com/navneethvaradharaj11-dev
+
+For critical security issues, open an issue and mark it as confidential or contact the repository owner directly.
