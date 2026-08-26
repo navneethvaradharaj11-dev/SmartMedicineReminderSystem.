@@ -811,7 +811,7 @@ const Index = () => {
 
         // Filter by gender keyword (checking both name and voiceURI)
         const isMale = voiceGender === "male";
-        let genderVoices = candidates.filter((voice) => {
+        const genderVoices = candidates.filter((voice) => {
           const name = voice.name || "";
           const uri = voice.voiceURI || "";
           return checkIsVoiceMale(name, uri) === isMale;

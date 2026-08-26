@@ -233,7 +233,7 @@ const HomeScreen = ({
     };
 
     let curStreak = 0;
-    let checkDate = new Date(now);
+    const checkDate = new Date(now);
 
     const todayKey = getLocalDateKey(checkDate);
     if (hasMissedDose(todayKey)) {
@@ -269,7 +269,7 @@ const HomeScreen = ({
     if (allRecordedDates.length > 0) {
       let tempStreak = 0;
       const oldestDate = new Date(allRecordedDates[0]);
-      let currentCheck = new Date(oldestDate);
+      const currentCheck = new Date(oldestDate);
 
       while (getLocalDateKey(currentCheck) <= todayStr) {
         const key = getLocalDateKey(currentCheck);
