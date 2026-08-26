@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.local
+!.env.example
+.vercel
 
 # Python
 __pycache__/
