@@ -1,10 +1,10 @@
-# 💊 Smart Medicine Reminder System (Gentle Dose)
+# MediMind — Intelligent Medication Reminder System
 
-[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://smart-medicine-reminder-system.vercel.app)  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://medimind.vercel.app)  [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 Modern, cross-platform medication adherence system combining a React + TypeScript web dashboard with a lightweight Python BLE gateway and Arduino firmware for an IoT smart pillbox.
 
-Live demo: https://smart-medicine-reminder-system.vercel.app
+Live demo: https://medimind.vercel.app
 
 ---
 
@@ -31,7 +31,7 @@ Live demo: https://smart-medicine-reminder-system.vercel.app
 
 ## About
 
-Gentle Dose is an intelligent medication reminder and adherence analytics platform that pairs a web-based dashboard with a physical IoT smart pillbox. The system supports voice reminders (English & Tamil), BLE communication to the pillbox, a dose history log, caregiver profiles, and accessibility-focused audio feedback.
+MediMind is an intelligent medication reminder and adherence analytics platform that pairs a web-based dashboard with a physical IoT smart pillbox. The system supports voice reminders, accessibility features, and simple local device integration to help patients and caregivers manage medication schedules reliably.
 
 This repository contains three main components:
 1. Web dashboard (Vite + React + TypeScript)
@@ -62,7 +62,7 @@ This repository contains three main components:
 
 ## System Architecture
 
-The frontend communicates with a local Python BLE gateway via HTTP/websockets. The gateway connects to the Arduino-based pillbox over a serial/Bluetooth link and relays hardware events and commands.
+The frontend communicates with a local Python BLE gateway via HTTP/websockets. The gateway connects to the Arduino-based pillbox over a serial/Bluetooth link and relays hardware events and commands between the device and the dashboard.
 
 (High-level)
 
@@ -84,8 +84,8 @@ The frontend communicates with a local Python BLE gateway via HTTP/websockets. T
 1. Clone the repo:
 
 ```bash
-git clone https://github.com/navneethvaradharaj11-dev/SmartMedicineReminderSystem.git
-cd SmartMedicineReminderSystem
+git clone https://github.com/navneethvaradharaj11-dev/MediMind.git
+cd MediMind
 ```
 
 2. Install dependencies and run the dev server:
@@ -105,14 +105,14 @@ Run the gateway (example):
 
 ```bash
 # from project root
-python gentle_dose.py
+python medimind_gateway.py
 ```
 
 Check gateway options and environment variables in the repository files.
 
 ### Arduino Firmware
 
-1. Open `arduino/smart_medicine_reminder/smart_medicine_reminder.ino` in the Arduino IDE.
+1. Open `arduino/smart_medicine_reminder/smart_medicine_reminder.ino` in the Arduino IDE (path may vary).
 2. Configure pins and the Bluetooth serial parameters (HC-05) as required.
 3. Upload to your board (Nano/Uno/ESP32 as applicable).
 
